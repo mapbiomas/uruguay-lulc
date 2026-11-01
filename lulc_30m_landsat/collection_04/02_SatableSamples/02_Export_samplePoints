@@ -1,0 +1,249 @@
+// AUTHOR: Juliano Schirmbeck
+// DATE: nov 2020
+
+// ES: Define un polígono de referencia mediante coordenadas geográficas.
+//     Esta geometría no se utiliza en las operaciones posteriores del script.
+// EN: Defines a reference polygon using geographic coordinates.
+//     This geometry is not used in subsequent script operations.
+var limite_PAMPA = 
+    /* color: #d63000 */
+    /* shown: false */
+    ee.Geometry.Polygon(
+        [[[-58.89903243473292, -33.90945759789922],
+          [-58.16280033456499, -34.499816860847936],
+          [-57.2862137727395, -34.79490451623124],
+          [-55.19834373490166, -35.44914265276266],
+          [-53.765088158901605, -34.46740051239218],
+          [-53.17125331408759, -33.65836262321688],
+          [-52.8934190863683, -32.811213773068836],
+          [-53.50937251712497, -32.03185386133755],
+          [-54.8003634592565, -31.06489845827693],
+          [-56.10117941688713, -30.162803430416954],
+          [-57.67702021839042, -29.826468649902285],
+          [-58.21360234939319, -30.66900608099251],
+          [-58.49497045967579, -31.812411235606]]]);
+          
+
+// ES: Identificador territorial utilizado en los nombres de exportación.
+// EN: Territorial identifier used in export names.
+var bioma = "PAMPAURUGUAY";
+
+// ES: Número de colección utilizado para construir las rutas de los assets.
+// EN: Collection number used to construct asset paths.
+var colection = 6
+
+// ES: Versión utilizada en el nombre del asset de entrada y de las salidas.
+// EN: Version used in the input asset name and output names.
+var versao = 'v1'
+
+// ES: Cantidad solicitada de puntos por clase y por entidad regional.
+//     No representa el total nacional. Si hay menos píxeles válidos
+//     disponibles para una clase, se obtendrán menos puntos.
+// EN: Requested number of points per class and per regional feature.
+//     This is not the national total. If fewer valid pixels are available
+//     for a class, fewer points will be returned.
+var nSamples = 2000;
+
+
+// ES: Selecciona el sufijo del período del mapa de clases persistentes.
+//     Se utiliza para localizar la imagen de entrada y nombrar la salida;
+//     este script no calcula la persistencia temporal.
+// EN: Selects the period suffix of the persistent-class map.
+//     It is used to locate the input image and name the output;
+//     this script does not calculate temporal persistence.
+var sufix = '85_89'
+//var sufix = '90_94' 
+//var sufix = '95_99'
+//var sufix = '00_04'
+//var sufix = '05_09'
+//var sufix = '10_14' 
+//var sufix = '15_19'
+//var sufix = '20_24'
+
+// ES: Ruta alternativa de entrada, actualmente desactivada.
+// EN: Alternative input path, currently disabled.
+//var dirsamples = ee.Image('projects/MapBiomas_Pampa/WORKSPACE/Uruguay/Pampa_amostras_estaveis_00a19_v02')
+
+// ES: Carga el mapa de clases persistentes para la colección, período y versión.
+//     La imagen debe contener una banda categórica entera llamada "reference".
+// EN: Loads the persistent-class map for the collection, period, and version.
+//     The image must contain an integer categorical band named "reference".
+var dirsamples = ee.Image('projects/mapbiomas-uruguay/assets/LAND-COVER/COLLECTION-'+colection+'/SAMPLES/C'+colection+'Amostras_estaveis_Uruguay_C'+colection+'_' + sufix + '_' + versao)
+
+// ES: Ruta alternativa de salida, actualmente desactivada.
+// EN: Alternative output path, currently disabled.
+//var dirout = 'projects/MapBiomas_Pampa/SAMPLES/C1/Estaveis/Uruguay/';
+
+// ES: Define la carpeta de assets donde se exportarán los puntos.
+// EN: Defines the asset folder where the points will be exported.
+var dirout = 'projects/mapbiomas-uruguay/assets/LAND-COVER/COLLECTION-'+colection+'/SAMPLES/PUNTOS/'
+
+// ES: Carga las entidades regionales utilizadas como ámbitos de muestreo.
+//     Cada entidad debe contener la propiedad "ECOZONA".
+// EN: Loads the regional features used as sampling areas.
+//     Each feature must contain the "ECOZONA" property.
+var regioesCollection = ee.FeatureCollection('projects/mapbiomas-uruguay/assets/LAND-COVER/ANCILLARY_DATA/C5/regiones_buffer_uy_ext')
+
+
+// ES: Importa el módulo de paletas de colores de MapBiomas.
+// EN: Imports the MapBiomas color palette module.
+var palettes = require('users/mapbiomas/modules:Palettes.js');
+
+// ES: Configura la visualización de la banda de referencia.
+//     El rango 0–34 no permite distinguir correctamente las clases 79, 80 y 83;
+//     esto afecta la visualización, no los valores utilizados en el muestreo.
+// EN: Configures the reference band visualization.
+//     The 0–34 range cannot correctly distinguish classes 79, 80, and 83;
+//     this affects display, not the values used for sampling.
+var vis = {
+    'bands': ['reference'],
+    'min': 0,
+    'max': 34,
+    'palette': palettes.get('classification2')
+};
+
+// ES: Agrega el mapa de clases persistentes, visible por defecto.
+// EN: Adds the persistent-class map, visible by default.
+Map.addLayer(dirsamples, vis, 'Classes persistentes'+ sufix, true);
+
+// ES: Muestra las entidades regionales y sus propiedades en la consola.
+// EN: Displays the regional features and their properties in the console.
+print(regioesCollection)
+
+////////////////////////////////////////////////////////
+
+// ES: Genera una colección de puntos de entrenamiento para una entidad regional.
+//     Realiza un muestreo aleatorio estratificado por clase y agrega a cada
+//     punto el identificador "ECOZONA" de la entidad de origen.
+// EN: Generates a collection of training points for one regional feature.
+//     Performs random sampling stratified by class and adds the source
+//     feature's "ECOZONA" identifier to each point.
+var getTrainingSamples = function (feature) {
+
+  // ES: Obtiene el identificador regional de la entidad procesada.
+  // EN: Retrieves the regional identifier of the feature being processed.
+  var regiao = feature.get('ECOZONA');
+  //print(regiao)
+
+  // ES: Asigna la misma cantidad solicitada de muestras a cada clase.
+  //     Estas variables permiten definir cantidades diferentes por clase
+  //     si se modifican en una versión posterior.
+  // EN: Assigns the same requested sample count to each class.
+  //     These variables allow different counts per class to be defined
+  //     if modified in a later version.
+  var num_train_02 = nSamples
+  var num_train_03 = nSamples
+  var num_train_04 = nSamples
+  var num_train_09 = nSamples
+  var num_train_11 = nSamples
+  var num_train_12 = nSamples
+  var num_train_15 = nSamples
+  var num_train_18 = nSamples
+  var num_train_21 = nSamples
+  var num_train_22 = nSamples
+  var num_train_33 = nSamples
+  var num_train_79 = nSamples
+  var num_train_80 = nSamples
+  var num_train_83 = nSamples
+  
+  
+  // ES: Extrae la geometría de la entidad regional.
+  // EN: Extracts the regional feature's geometry.
+  var clippedGrid = ee.Feature(feature).geometry()
+
+  // ES: Recorta el mapa de referencia al ámbito de la entidad regional.
+  // EN: Clips the reference map to the regional feature's extent.
+  var referenceMap =  dirsamples.clip(clippedGrid);
+  //Map.addLayer(referenceMap,vis)
+
+  // ES: Extrae puntos aleatorios por clase a una escala nominal de 30 m.
+  //     - classBand: banda que define los estratos del muestreo.
+  //     - numPoints: 0 establece cero puntos para clases no enumeradas.
+  //     - region: limita el muestreo a la geometría de la entidad.
+  //     - seed: fija la semilla aleatoria para reproducibilidad con los
+  //       mismos datos y parámetros.
+  //     - geometries: true conserva la geometría de cada punto.
+  //     - classValues y classPoints: relacionan cada código con su cantidad.
+  //     Por defecto, se omiten píxeles con alguna banda enmascarada.
+  // EN: Extracts random points per class at a nominal scale of 30 m.
+  //     - classBand: band defining the sampling strata.
+  //     - numPoints: 0 sets zero points for classes not listed.
+  //     - region: restricts sampling to the feature's geometry.
+  //     - seed: fixes the random seed for reproducibility with the
+  //       same data and parameters.
+  //     - geometries: true retains each point's geometry.
+  //     - classValues and classPoints: pair each code with its sample count.
+  //     By default, pixels with any masked band are skipped.
+  var training = referenceMap.stratifiedSample({scale:30, classBand: 'reference', numPoints: 0, region: feature.geometry(), seed: 1, geometries: true,
+           classValues: [2, 3, 4, 9, 11, 12, 15, 18, 21, 22, 33,79,80,83], 
+           classPoints: [num_train_02,
+                         num_train_03,
+                         num_train_04,
+                         num_train_09,
+                         num_train_11,
+                         num_train_12,
+                         num_train_15,
+                         num_train_18,
+                         num_train_21,
+                         num_train_22,
+                         num_train_33,
+                         num_train_79,
+                         num_train_80,
+                         num_train_83,]
+  });
+
+  // ES: Recorre los puntos obtenidos y agrega la propiedad regional "ECOZONA",
+  //     conservando las propiedades extraídas de la imagen y la geometría.
+  // EN: Iterates over the sampled points and adds the regional "ECOZONA"
+  //     property, retaining the image-derived properties and geometry.
+  training = training.map(function(feat) {return feat.set({'ECOZONA': regiao})});
+
+  // ES: Devuelve la colección de puntos de esta entidad regional.
+  // EN: Returns the point collection for this regional feature.
+  return training;
+ };
+
+// ES: Ejecuta la función para cada entidad regional y reúne las colecciones
+//     resultantes en una única colección de puntos mediante flatten().
+//     Si las regiones se superponen, sus muestreos pueden compartir áreas;
+//     flatten() no elimina puntos duplicados ni impone separación espacial.
+// EN: Runs the function for each regional feature and combines the resulting
+//     collections into a single point collection using flatten().
+//     If regions overlap, their samples may share areas;
+//     flatten() does not remove duplicate points or enforce spatial separation.
+var mySamples = regioesCollection.map(getTrainingSamples).flatten();
+
+// ES: Agrega los puntos de entrenamiento al mapa.
+// EN: Adds the training points to the map.
+Map.addLayer(mySamples)
+
+// ES: Muestra el primer punto y sus propiedades.
+// EN: Displays the first point and its properties.
+print(mySamples.first())
+
+// ES: Muestra una colección limitada a un punto para inspeccionar su estructura.
+// EN: Displays a collection limited to one point to inspect its structure.
+print(mySamples.limit(1))
+
+// ES: Muestra la cantidad total de puntos generados para todas las regiones.
+// EN: Displays the total number of points generated across all regions.
+print(mySamples.size())
+
+
+// ES: Ejemplo alternativo de exportación, actualmente desactivado.
+// EN: Alternative export example, currently disabled.
+//Export.table.toAsset(mySamples,
+//  'samples_preclass_' + bioma + '_2000_'  + versao,
+//  dirout + 'samples_preclass_' + bioma + '_2000_'  + versao)
+
+// ES: Crea una tarea para exportar la colección de puntos a un asset.
+//     Los argumentos son: colección, descripción de la tarea y ruta del asset.
+//     Los nombres incorporan colección, territorio, período y versión.
+//     La tarea debe iniciarse desde la pestaña Tasks de Earth Engine.
+// EN: Creates a task to export the point collection to an asset.
+//     Arguments are: collection, task description, and asset path.
+//     Names include the collection, territory, period, and version.
+//     The task must be started from the Earth Engine Tasks tab.
+Export.table.toAsset(mySamples,
+  'samples_C_'+colection + bioma + '_'  + sufix + '_' + versao,
+  dirout + 'samples_C'+colection+'_' + bioma + '_'  + sufix + '_' + versao)
