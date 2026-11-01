@@ -1,0 +1,1937 @@
+// ES: Documentación bilingüe añadida. Código original conservado; no ejecutado en Earth Engine.
+// EN: Added bilingual documentation. Original code preserved; not executed in Earth Engine.
+// MAPBIOMAS URUGUAY
+// COLLECTION 04
+// Adaptado de:Juliano Schirmbeck y Sarrailhe Sofia
+// DATE: 2023
+//
+
+// ES: Configura versiones de entrada/salida. El bucle posterior procesa las siete regiones.
+// EN: Sets input/output versions. The later loop processes all seven regions.
+var region = '1'; var version = '13' ; var versionout = '15'
+
+
+// ES: Año mostrado en las capas; no limita los años procesados.
+// EN: Year displayed in layers; it does not limit processed years.
+var year_vis = '2020'
+
+//var version = '033'
+// ES: Colección efectiva: 6; el encabezado histórico indica 04.
+// EN: Effective collection: 6; the historical header states 04.
+var col = '6'
+ 
+var bioma = "PAMPAURUGUAY "
+
+//var col = '4'
+var years = '85-25'
+
+//projects/MapBiomas_Pampa/WORKSPACE/COLLECTION2/ARGENTINA/classification_c2_filtros/PAMPAARGENTINA_col2_6_1Nat_2_85-21_mosaic
+// ES: versionIn recibe undefined: dir_filtros todavía no fue asignado. No se corrige aquí.
+// EN: versionIn receives undefined: dir_filtros has not been assigned yet. Left unchanged.
+var versionOut = 'col'+ col + '-v' + versionout + '-MultiFreq-' + years +  '-mosaic'
+var versionIn = dir_filtros
+
+var version_hand = '01'
+
+// ES: Ruta de la clasificación temporal de entrada; se esperan bandas anuales 1985–2025.
+// EN: Input temporal classification path; annual bands for 1985–2025 are expected.
+
+var dir_filtros = 'projects/mapbiomas-uruguay/assets/LAND-COVER/COLLECTION-'+col+'/WORKSPACE/classificationC'+col+'/_class_v_' + version +'_temp'
+// ES: Regiones filtradas luego por ID_. El módulo externo calcula las capas de diferencias.
+// EN: Regions are later filtered by ID_. The external module computes difference layers.
+//var dir_filtros = 'projects/MapBiomas_Pampa/WORKSPACE/COLLECTION4/URUGUAY/MOSAICOS/Mosaicos_ConFiltro/clasificacion-1985-2023-'+version+'con_filtro'
+var regioesCollection = ee.FeatureCollection('projects/mapbiomas-uruguay/assets/LAND-COVER/ANCILLARY_DATA/C5/regiones_buffer_uy_ext')
+var diferenca = require('users/schirmbeckj/PampaTriNacional:Utils/Passo100_Mapa_Diferencas_Classe_v02.js').diferenca
+// ES: Carga una clasificación HAND auxiliar; el filtro utiliza su código 2.
+// EN: Loads an auxiliary HAND classification; the filter uses code 2.
+
+                  
+var image_hand_class = ee.Image('projects/MapBiomas_Pampa/WORKSPACE/COLLECTION3/URUGUAY/classification_c3_filtros/classes_hand01')
+                                 //'projects/mapbiomas-workspace/AMOSTRAS/col6/PAMPA/class_col6_filtros/classes_hand01
+
+var palettes = require('users/mapbiomas/modules:Palettes.js');
+var vis1 = { 'bands': 'classification_' + year_vis,'min': 0, 'max': 45,  'palette': palettes.get('classification5')};
+
+var vis = { 'min': 0, 'max': 45,  'palette': palettes.get('classification5')};
+
+var vischange = {"min": 0, "max": 3,
+        "palette": "ffffff,ff0000,e6f919,aaaaaa",    //amarelo=e6f919    magenta=bb34c0
+        "format": "png",
+        'bands': 'classification_' + year_vis
+
+  }
+
+// ES: Frecuencias por posición de banda: requieren 41 bandas ordenadas de 1985 a 2025. No son probabilidades.
+// EN: Band-position frequencies require 41 ordered bands from 1985 through 2025. These are not probabilities.
+//Calculando frequencias
+// General rule
+//CON 1985
+var exp = '100*((b( 0)+b( 1)+b( 2)+b( 3)+b( 4)+b( 5)+b( 6)+b( 7)+b( 8)+b( 9)'+
+               '+b(10)+b(11)+b(12)+b(13)+b(14)+b(15)+b(16)+b(17)+b(18)+b(19)'+
+               '+b(20)+b(21)+b(22)+b(23)+b(24)+b(25)+b(26)+b(27)+b(28)+b(29)'+
+               '+b(30)+b(31)+b(32)+b(33)+b(34)+b(35)+b(36)+b(37)+b(38)+b(39)+b(40))/41)';
+// ES: exp1 usa índices 13–40: 1998–2025 si la primera banda es 1985; el comentario original no corresponde.
+// EN: exp1 uses indices 13–40: 1998–2025 if the first band is 1985; the original comment does not match.
+//SIN 1985 (Hasta el 86)
+var exp1 = '100*((b(13)+b(14)+b(15)+b(16)+b(17)+b(18)+b(19)'+
+              '+b(20)+b(21)+b(22)+b(23)+b(24)+b(25)+b(26)+b(27)+b(28)+b(29)'+
+              '+b(30)+b(31)+b(32)+b(33)+b(34)+b(35)+b(36)+b(37)+b(38)+b(39)+b(40))/28)';
+              
+// ES: exp2 corresponde a 1998–2022 bajo ese mismo orden; exp4 a 2017–2025.
+// EN: Under the same ordering, exp2 covers 1998–2022 and exp4 covers 2017–2025.
+var exp2 = '100*((b(13)+b(14)+b(15)+b(16)+b(17)+b(18)+b(19)'+
+              '+b(20)+b(21)+b(22)+b(23)+b(24)+b(25)+b(26)+b(27)+b(28)+b(29)'+
+              '+b(30)+b(31)+b(32)+b(33)+b(34)+b(35)+b(36)+b(37))/25)';
+              
+var exp4 = '100*((b(32)+b(33)+b(34)+b(35)+b(36)+b(37)+b(38)+b(39)+b(40))/9)';
+// ES: Construye una máscara anual que acepta cualquiera de los códigos de la lista.
+// EN: Builds an annual mask accepting any code in the list.
+var get_mask = function(año, img, clases){
+    var msk = ee.Image(0)
+    clases.forEach(function(c){
+      msk =   msk.or(img.select("classification_" + año).eq(c))
+      })
+    return msk
+}
+
+// ES: Calcula la moda temporal restringida a 11, 18 y 15; excluye las demás clases.
+// EN: Computes temporal mode restricted to 11, 18 and 15; excludes other classes.
+var moda_agr_umi = function(stack){
+  var lst = stack.bandNames().map(function(b){
+    var msk = ee.Image(stack.select([b]))
+    msk = msk.eq(11).or(msk.eq(18)).or(msk.eq(15)) // 
+    return ee.Image(stack.select([b])).updateMask(msk).rename("B").toInt16()
+  })
+  return ee.ImageCollection.fromImages(lst).mode()
+}
+// ES: Calcula la moda temporal restringida a 12, 18 y 15.
+// EN: Computes temporal mode restricted to 12, 18 and 15.
+  var moda_ag_pz = function(stack){
+  var lst = stack.bandNames().map(function(b){
+    var msk = ee.Image(stack.select([b]))
+    msk = msk.eq(12).or(msk.eq(18)).or(msk.eq(15)) // 
+    return ee.Image(stack.select([b])).updateMask(msk).rename("B").toInt16()
+  })
+  return ee.ImageCollection.fromImages(lst).mode()
+
+}
+
+var regioes = [1, 2, 3, 4, 5, 6, 7]
+
+for (var i_regiao=0;i_regiao<regioes.length; i_regiao++){
+// ES: Procesa cada región por separado; no produce aquí un mosaico nacional unido.
+// EN: Processes each region separately; no combined national mosaic is produced here.
+    var regiao = regioes[i_regiao];
+
+  var limite = regioesCollection.filterMetadata('ID_', 'equals', regiao);
+ 
+ // var image_incidence = ee.Image('projects/mapbiomas-uruguay/assets/LAND-COVER/COLLECTION-5/WORKSPACE/MOSAICOS/Mosaicos_ConFiltro/Z'+regiao+'_85-22_pre_incidentes_v4')
+  var image_incidence = ee.Image('projects/mapbiomas-uruguay/assets/LAND-COVER/COLLECTION-6/WORKSPACE/classificationC6/_class_v_11_temp_Z1_85-22_pre_incidentes_v11')
+// ES: El asset de incidencia es fijo para todas las regiones y su nombre refiere a Z1 y 1985–2022. Verificar cobertura si se activan filtros que lo utilizan.
+// EN: The incidence asset is fixed across regions and its name refers to Z1 and 1985–2022. Check coverage if enabling filters that use it.
+ 
+  var raster_zona = ee.Image('projects/MapBiomas_Pampa/WORKSPACE/Uruguay/regiones_raster')
+ 
+ // var image_in = ee.Image (dir_filtros).mask(raster_zona) .clip(limite)
+ // var img_antes = ee.Image (dir_filtros ).mask(raster_zona)
+var image_in = ee.Image (dir_filtros).clip(limite)
+  var img_antes = ee.Image (dir_filtros ).clip(limite)
+
+var moda_ag_um = moda_agr_umi(image_in)
+
+var moda_agr_pz = moda_ag_pz(image_in)
+
+  Map.addLayer(image_in,vis1,'SinFiltro_Z' + regiao, false)
+  
+ 
+//  if (regiao == 1)   var aplicar = {freqagua_agr:0,freqHum: 0, SombrasMont:1, freqPz: 0, freqForest:1, freqForest_agr:1, freqBC:1, agr_pz:0,arroz_ah_pz:0, Bosq_AH:0,freqHumSL:0, PZBA6:1}
+  // if (regiao == 1)   var aplicar = {freqagua_agr:0,freqHum: 0, SombrasMont:1, freqPz: 0, freqForest:1, freqForest_agr:1, freqBC:1, agr_pz:0,arroz_ah_pz:0, Bosq_AH:0,freqHumSL:0, PZBA6:1, FiltroTemp1985:1,FiltroTemp3:1,FiltroTemp1995:1,FiltroTemp1996:0,FiltroTemp1999:1}
+// ES: Interruptores por región: 1 activa el filtro; 0 o propiedad ausente lo desactiva. Solo región 1 tiene filtros activos.
+// EN: Regional switches: 1 enables a filter; 0 or a missing property disables it. Only region 1 has active filters.
+  if (regiao == 1)   var aplicar = {freqagua_agr:0,freqHum: 0, SombrasMont:1, freqPz: 0, freqForest:1, freqForest_agr:1, freqBC:1, agr_pz:0,arroz_ah_pz:0, Bosq_AH:0,freqHumSL:0, PZBA6:1, FiltroTemp1985:1,FiltroTemp3:1,FiltroTemp1995:1,FiltroTemp1996:1,FiltroTemp1999:1,FiltroTemp2008:1,FiltroTemp2009:1}
+  if (regiao == 2)   var aplicar = {freqagua_agr:0,freqHum: 0, SombrasMont:0, freqPz: 0, freqForest:0, freqForest_agr:0, freqBC:0, agr_pz:0,arroz_ah_pz:0, Bosq_AH:0,freqHumSL:0}
+  if (regiao == 3)   var aplicar = {freqagua_agr:0,freqHum: 0, SombrasMont:0, freqPz: 0, freqForest:0, freqForest_agr:0, freqBC:0, agr_pz:0,arroz_ah_pz:0, Bosq_AH:0,freqHumSL:0}
+  if (regiao == 4)   var aplicar = {freqagua_agr:0,freqHum: 0, SombrasMont:0, freqPz: 0, freqForest:0, freqForest_agr:0, freqBC:0, agr_pz:0,arroz_ah_pz:0, Bosq_AH:0,freqHumSL:0}
+  if (regiao == 5)   var aplicar = {freqagua_agr:0,freqHum: 0, SombrasMont:0, freqPz: 0, freqForest:0, freqForest_agr:0, freqBC:0, agr_pz:0,arroz_ah_pz:0, Bosq_AH:0,freqHumSL:0}
+  if (regiao == 6)   var aplicar = {freqagua_agr:0,freqHum: 0, SombrasMont:0, freqPz: 0, freqForest:0, freqForest_agr:0, freqBC:0, agr_pz:0,arroz_ah_pz:0, Bosq_AH:0,freqHumSL:0}
+  if (regiao == 7)   var aplicar = {freqagua_agr:0,freqHum: 0, SombrasMont:0, freqPz: 0, freqForest_agr:0, freqForest:0,  freqBC:0, agr_pz:0,arroz_ah_pz:0, Bosq_AH:0,freqHumSL:0}
+
+
+
+  //var image_gap = ee.Image(dir_filtros +  '0' + String(regiao) +'_RF85a21_v' + versionIn);
+//  print(image_incidence)
+  
+  
+ // Map.addLayer(image_gap,vis1,'MapBio GAP')
+  
+    
+  // get frequency
+// ES: Las frecuencias se calculan antes de los filtros y no se actualizan tras cada cambio. Las reglas posteriores sí reciben image_in modificada.
+// EN: Frequencies are calculated before filtering and are not updated after each change. Later rules do receive the modified image_in.
+  var florFreq  = image_in.eq(3).expression(exp);
+  var bosqueFreq  = image_in.eq(3).expression(exp);
+  var forestacionFreq   = image_in.eq(9).expression(exp)
+  var forFreq   = image_in.eq(9).expression(exp);
+  var forFreq1   = image_in.eq(9).expression(exp1);
+  
+var forFreq4   = image_in.eq(9).expression(exp4);
+  var umiFreq   = image_in.eq(11).expression(exp);
+  var grassFreq = image_in.eq(12).expression(exp);
+  var agricFreq = image_in.eq(18).expression(exp);
+  var pastFreq = image_in.eq(15).expression(exp);
+  var anvFreq   = image_in.eq(22).expression(exp);
+  var aguaFreq  = image_in.eq(33).expression(exp);
+
+  
+        //**********************************************
+  //******** Reras do filtro de frequencia  agua y agricultura
+  //**********************************************
+  // 
+    if (aplicar.freqagua_agr){
+    
+      var Poligono_agua = poli_agua.reduceToImage(["pol"], ee.Reducer.first())   
+// ES: Regla opcional con polígonos de agua: requiere poli_agua como entrada externa.
+// EN: Optional water-polygon rule: requires poli_agua as an external input.
+     
+    var vegMask5 = ee.Image(0)
+                         .where((aguaFreq.gt(1)
+                             .and((agricFreq.add(grassFreq).add(pastFreq)
+                             
+                             .gte(10))
+                             )),1)
+                         
+  //  var image_moda = image_in.reduce(ee.Reducer.mode())
+    var vegMap5 = ee.Image(0)
+                        .where(vegMask5.eq(1).and(Poligono_agua.eq(1))
+                        , 11)
+                        
+    vegMap5 = vegMap5.updateMask(vegMap5.neq(0))
+    image_in = image_in.where(vegMap5.and(image_in.eq(18)), vegMap5)
+    Map.addLayer(image_in,vis1,'Filtro freqagua_agr' + regiao, false)
+     
+    var clase_dif = 11
+    var img_dif = diferenca(img_antes,image_in,clase_dif).clip(limite)
+    Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif freqagua clase ' + String(clase_dif), false)
+
+  }
+  
+  
+  //**********************************************
+  //******** Filtro de freqHum
+  //**********************************************
+// problemas associados a floresta em area umida
+     if (aplicar.freqHum){
+    
+     //trabalha com areas com predominância de banhado > 51%  
+     var vegMask51 = ee.Image(0)
+                             .where((umiFreq.gt(1)
+                             .and((umiFreq.add(grassFreq)
+                             .add(aguaFreq).add(florFreq))
+                             .gt(80))
+                             .and(image_incidence.select('incidence').gt(1))),
+                             1)
+     var  vegMap51 = ee.Image(0)
+                             .where(vegMask51.eq(1).and(umiFreq.gt(70)), 11)
+
+     vegMap51 = vegMap51.updateMask(vegMap51.neq(0))
+     //Map.addLayer(vegMap51,vis,'vegMap 1 - 51')
+     //Map.addLayer(vegMask51,vis,'vegMask carrosel 1 - 51')
+     image_in = image_in.where(vegMap51, vegMap51)
+  
+     //trabalhar com frequencias minoritárias de banhado <20 levando a moda
+// ES: Regla opcional de humedales basada en frecuencia e incidencia.
+// EN: Optional wetland rule based on frequency and incidence.
+ //  var vegMask20 = ee.Image(0)
+ //                           .where((umiFreq.lt(20)
+ //                           .and(umiFreq.gt(1))
+ //                           .and(image_incidence.select('incidence').gt(1))),
+ //                           1)
+ //  var  vegMap20 = ee.Image(0)
+ //                          .where(vegMask20.eq(1),image_incidence.select('classification_mode'))
+ //
+ //  vegMap20 = vegMap20.updateMask(vegMap20.neq(0))
+ //  image_in = image_in.where(vegMap20.and(image_in.eq(11)), vegMap20)
+ //  
+ //  //Map.addLayer(vegMap20,vis,'vegMap 1 - 20')
+ //  //Map.addLayer(vegMask20,vis,'vegMask carrosel 20')
+ //  
+ //  //trabalhar com frequencias intermediárias de banhado 20% a 70% levando a moda
+ //  var vegMaskx = ee.Image(0)
+ //                           .where(umiFreq.gt(19)
+ //                           .and(umiFreq.lt(71))
+ //                           .and(florFreq.lt(33))
+ //                           .and(florFreq.gt(1))
+ //                           .and((florFreq.add(umiFreq).add(aguaFreq)).gt(75))
+ //                           ,1)
+ //                           
+ //  var  vegMapx = ee.Image(0).where(vegMaskx.eq(1),11)
+ //  vegMapx = vegMapx.updateMask(vegMapx.neq(0))
+ //  
+ //  image_in = image_in.where(vegMapx.and(image_in.eq(3)), vegMapx)
+  
+     //Map.addLayer(vegMapx,vis,'vegMap 1 - x')
+     //Map.addLayer(vegMaskx,vis,'vegMask carrosel x')
+  
+  
+     //var temp = image_in.eq(11)
+     //temp = temp.mask(temp).multiply(11)
+     Map.addLayer(image_in,vis1,'Filtro freqAH'+ regiao, false)
+  
+     var clase_dif = 11
+     var img_dif = diferenca(img_antes,image_in,clase_dif)//.clip(limite)
+     Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif freqAH clase ' + String(clase_dif), false)
+
+   }
+   
+    //**********************************************
+  //******** Filtro de freqHum Graben Santa_Lucia
+  //**********************************************
+// problemas associados a floresta em area umida
+ if (aplicar.freqHumSL){
+
+ var Poligono1 = Poligono.reduceToImage(["poli"], ee.Reducer.first())
+ 
+var vegMask = ee.Image(0)
+                         .where((umiFreq
+                         .add(aguaFreq)
+                         .add(agricFreq)
+                         .add(pastFreq)
+                         .add(grassFreq))
+                         .gt(90), 1)
+  
+/////Mapa base: 
+var image_moda = image_in.reduce(ee.Reducer.mode())
+var vegMap = ee.Image(0)
+                        .where(vegMask.eq(1)
+                        .and(agricFreq.add(grassFreq).add(pastFreq)
+                        .gt(39).and(Poligono1.eq(0))), image_moda)
+
+vegMap = vegMap.updateMask(vegMap.neq(0))
+image_in = image_in.where(vegMap.and(image_in.eq(11)), vegMap)
+
+Map.addLayer(image_in,vis1,'Filtro freqHumSL'+ regiao, false)
+
+}
+
+
+
+
+
+
+
+
+  //**********************************************
+  //******** Filtro de SombrasMont
+  //**********************************************
+  //corrigir agua em sombra de relevo e area umida
+// ES: Regla opcional localizada; Poligono debe existir como entrada externa.
+// EN: Optional localized rule; Poligono must exist as an external input.
+    if (aplicar.SombrasMont){
+      
+    //trabalha com areas com predominância de banhado > 51%  
+    var vegMaskAg = ee.Image(0)
+                            .where((aguaFreq.gt(1))
+                            .and(aguaFreq.lt(95))
+                            .or((umiFreq.gt(1))
+                            .and(umiFreq.lt(90)))
+                            .and(image_hand_class.eq(2)),
+                            1)
+                             
+    var moda_n_agua = image_in.updateMask(image_in.neq(33)).reduce(ee.Reducer.mode());                     
+    var moda_n_umi = image_in.updateMask(image_in.neq(11)).reduce(ee.Reducer.mode());                     
+    
+    var  vegMapAg = vegMaskAg
+  
+    vegMapAg = vegMapAg.updateMask(vegMapAg.neq(0))
+//    Map.addLayer(vegMapAg,vis,'vegMap - Ag', false)
+//    Map.addLayer(vegMaskAg,vis,'vegMask carrosel - Ag', false)
+//    Map.addLayer(image_hand_class,{},'HAND Class', false)
+    image_in = image_in.where(vegMapAg.and(image_in.eq(33)), moda_n_agua)
+    image_in = image_in.where(vegMapAg.and(image_in.eq(11)), moda_n_umi)
+    Map.addLayer(image_in,vis1,'Filtro hand', false)
+    
+    var clase_dif = 11
+    var img_dif = diferenca(img_antes,image_in,clase_dif)//.clip(limite)
+    Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif hand clase ' + String(clase_dif), false)
+
+      
+    }
+    
+
+   //**********************************************
+   //******** Filtro de frequencia pastizal
+   //**********************************************
+   // 
+// ES: Sustituye agua/humedal bajo la máscara HAND por modas que excluyen respectivamente 33 y 11.
+// EN: Replaces water/wetland under the HAND mask using modes excluding 33 and 11 respectively.
+     if (aplicar.freqPz){
+    
+     //trabalha com areas com predominância de banhado > 51%  
+     var vegMask51 = ee.Image(0)
+                             .where((grassFreq.gt(1)
+                             .and((umiFreq.add(grassFreq))
+                             .gt(90))
+                             .and(image_incidence.select('incidence').gt(10))),
+                             1)
+     var  vegMap51 = ee.Image(0)
+                             .where(vegMask51.eq(1).and(grassFreq.gt(70)), 12)
+
+     vegMap51 = vegMap51.updateMask(vegMap51.neq(0))
+     image_in = image_in.where(vegMap51, vegMap51)
+  
+
+     Map.addLayer(image_in,vis1,'Filtro freqPz' + regiao, false)
+
+     var clase_dif = 12
+     var img_dif = diferenca(img_antes,image_in,clase_dif)//.clip(limite)
+     Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif freqPz clase ' + String(clase_dif), false)
+
+   }
+  
+  
+   //**********************************************
+  //******** Reras do filtro de agricultura/pastizal
+  //**********************************************
+  // problemas associados a agricultura en area humeda
+  // es un filtro agresivo, asi que se aplica sobre un poligono
+    if (aplicar.agr_pz){
+
+  //    var mask6 = ee.Image(0)
+  //                         .where((      
+  //                                       anvFreq.lte(30)
+  //                                  
+  //                                  )
+  //                         , 1)   
+  // Antropicas > 20%
+      var mask_agr = ee.Image(0)
+                         .where((agricFreq
+                         .add(pastFreq)
+                         .add(grassFreq))
+                         .gte(95)
+                         .and((image_incidence.select('incidence').gte(3))), 1)
+                           
+      var  vegMap_Agr = ee.Image(0)
+                            .where(mask_agr.eq(1).and(agricFreq.gt(75).add(pastFreq(75))) ///VER PORCENTAJE
+                            , 1)
+  
+  /////Mapa base:
+    var activacion = vegMap_Agr//.and(mask6_2)
+
+   //si en el año es humedal o pastizal, deberia ser agriculura.
+   
+    var  output =   
+                    image_in.select("classification_1985")//.where(activacion.eq(1).and(get_mask(1985, image_in, [12])), moda_agr_pz)
+          .addBands(image_in.select("classification_1986"))//.where(activacion.eq(1).and(get_mask(1986, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_1987"))//.where(activacion.eq(1).and(get_mask(1987, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_1988"))//.where(activacion.eq(1).and(get_mask(1988, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_1989"))//.where(activacion.eq(1).and(get_mask(1989, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_1990"))//.where(activacion.eq(1).and(get_mask(1990, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_1991"))//.where(activacion.eq(1).and(get_mask(1991, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_1992"))//.where(activacion.eq(1).and(get_mask(1992, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_1993"))//.where(activacion.eq(1).and(get_mask(1993, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_1994"))//.where(activacion.eq(1).and(get_mask(1994, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_1995"))//.where(activacion.eq(1).and(get_mask(1995, image_in, [12])), moda_agr_pz))
+// ES: Bloque desactivado en la configuración actual. La expresión pastFreq(75) intenta llamar una imagen como función y debe revisarse antes de activarlo.
+// EN: Block disabled in the current configuration. pastFreq(75) attempts to call an image as a function and must be reviewed before enabling it.
+          .addBands(image_in.select("classification_1996"))//.where(activacion.eq(1).and(get_mask(1996, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_1997"))//.where(activacion.eq(1).and(get_mask(1997, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_1998"))//.where(activacion.eq(1).and(get_mask(1998, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_1999"))//.where(activacion.eq(1).and(get_mask(1999, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2000"))//.where(activacion.eq(1).and(get_mask(2000, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2001"))//.where(activacion.eq(1).and(get_mask(2001, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2002"))//.where(activacion.eq(1).and(get_mask(2002, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2003"))//.where(activacion.eq(1).and(get_mask(2003, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2004"))//.where(activacion.eq(1).and(get_mask(2004, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2005"))//.where(activacion.eq(1).and(get_mask(2005, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2006"))//.where(activacion.eq(1).and(get_mask(2006, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2007"))//.where(activacion.eq(1).and(get_mask(2007, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2008"))//.where(activacion.eq(1).and(get_mask(2008, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2009"))//.where(activacion.eq(1).and(get_mask(2009, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2010").where(activacion.eq(1).and(get_mask(2010, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2011").where(activacion.eq(1).and(get_mask(2011, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2012").where(activacion.eq(1).and(get_mask(2012, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2013").where(activacion.eq(1).and(get_mask(2013, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2014").where(activacion.eq(1).and(get_mask(2014, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2015").where(activacion.eq(1).and(get_mask(2015, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2016").where(activacion.eq(1).and(get_mask(2016, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2017").where(activacion.eq(1).and(get_mask(2017, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2018").where(activacion.eq(1).and(get_mask(2018, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2019"))//.where(activacion.eq(1).and(get_mask(2019, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2020"))//.where(activacion.eq(1).and(get_mask(2020, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2021"))//.where(activacion.eq(1).and(get_mask(2021, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2022").where(activacion.eq(1).and(get_mask(2022, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2023").where(activacion.eq(1).and(get_mask(2023, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2024").where(activacion.eq(1).and(get_mask(2024, image_in, [12])), moda_agr_pz))
+          .addBands(image_in.select("classification_2025").where(activacion.eq(1).and(get_mask(2025, image_in, [12])), moda_agr_pz))
+    var  anv6Map = output   //
+ //  Map.addLayer(get_mask(2001, image_in, [18]), {}, 'vegMap')
+ //  Map.addLayer(activacion, {}, 'activacion')
+ //  Map.addLayer(moda_ag_pr, {}, 'moda_ag_pr')
+  
+   anv6Map = anv6Map.updateMask(anv6Map.neq(0)) 
+    
+   image_in = image_in.where(anv6Map, anv6Map).clip(limite);
+  //
+  // vegMap51 = vegMap51.updateMask(vegMap51.neq(0))
+
+  // image_in = image_in.where(vegMap51, vegMap51)
+
+    Map.addLayer(image_in,vis1,'freq_agr_pz ' + regiao, false)
+
+    var clase_dif = 12
+
+
+    var img_dif = diferenca(img_antes,image_in,clase_dif)//.clip(limite)
+
+
+    Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif filtro freq_agr_pz_clase  ' + String(clase_dif), false)
+
+     
+  }
+  
+   //**************************************************************************************************************
+  //******** ***************************************FILTROS FORESTACION********************************************
+  //****************************************************************************************************************
+    
+       //**********************************************
+  //******** Reras do filtro de frequencia  saca bosque de Frostecion Uruguay
+  //**********************************************
+  // 
+// ES: Convierte únicamente clase 3 a 9 donde se cumplen los umbrales conjuntos de forestación, bosque y pastizal.
+// EN: Converts only class 3 to 9 where the combined plantation, forest and grassland thresholds hold.
+    if (aplicar.freqForest){
+      
+     
+    var vegMask5 = ee.Image(0)
+                         .where((forestacionFreq
+                         .add(bosqueFreq)
+                         //.add(agricFreq)
+                         .add(grassFreq))
+                         .gt(90), 1)
+                         
+  //  var image_moda = image_in.reduce(ee.Reducer.mode())
+    var vegMap5 = ee.Image(0)
+                        .where(vegMask5.eq(1)
+                        .and(forestacionFreq
+                        .gt(15).and(grassFreq.gte(1))), 9)
+                        
+    vegMap5 = vegMap5.updateMask(vegMap5.neq(0))
+    image_in = image_in.where(vegMap5.and(image_in.eq(3)), vegMap5)
+    Map.addLayer(image_in,vis1,'Filtro freqForest' + regiao, false)
+    
+    var clase_dif = 9
+    var img_dif = diferenca(img_antes,image_in,clase_dif)//.clip(limite)
+    Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif freqPr clase ' + String(clase_dif), false)
+
+  }
+    
+    
+   /* 
+    //**********************************************
+      //******** Reras do filtro de frequencia  saca agricultura de Frostecion Uruguay
+  //**********************************************
+  // 
+    if (aplicar.freqForest_agr){
+      
+      var Poligonos_excluir = Poligono_agri
+  .merge(Poligono_agri2)
+  .merge(Poligono_agri3)
+  .merge(Poligono_agri4);
+      
+     var Pol_agri = Poligonos_excluir.reduceToImage(["pol"], ee.Reducer.first()).unmask(0);
+     
+     
+    var vegMask5 = ee.Image(0)
+                         .where((forFreq1. add(bosqueFreq)
+                         .add(agricFreq)
+                         .add(pastFreq)
+                         .add(grassFreq))
+                         .gt(90), 1)
+                         
+  //  var image_moda = image_in.reduce(ee.Reducer.mode())
+    var vegMap5 = ee.Image(0)
+                        .where(vegMask5.eq(1)
+                        .and(forFreq1.gt(15))
+                        .and(Pol_agri.neq(1)), 1)//estaba a 35,66 
+                        
+    vegMap5 = vegMap5.updateMask(vegMap5.neq(0))
+    
+    
+    
+    
+  //  var saida = image_in.where(vegMap5.and(image_in.eq(21)), vegMap5)
+     var activacion = vegMap5//.and(mask6_2)
+
+   //si en el año es humedal o pastizal, deberia ser agriculura.
+   
+    var  output =   
+                    image_in.select("classification_1985")//.where(activacion.eq(1).and(get_mask(1985, image_in, [21])),  9)
+          .addBands(image_in.select("classification_1986"))//.where(activacion.eq(1).and(get_mask(1986, image_in, [21])), 9))
+          .addBands(image_in.select("classification_1987"))//.where(activacion.eq(1).and(get_mask(1987, image_in, [21])), 9))
+          .addBands(image_in.select("classification_1988"))//.where(activacion.eq(1).and(get_mask(1988, image_in, [21])), 9))
+          .addBands(image_in.select("classification_1989"))//.where(activacion.eq(1).and(get_mask(1989, image_in, [21])), 9))
+          .addBands(image_in.select("classification_1990"))//.where(activacion.eq(1).and(get_mask(1990, image_in, [21])), 9))
+          .addBands(image_in.select("classification_1991"))//.where(activacion.eq(1).and(get_mask(1991, image_in, [21])), 9))
+          .addBands(image_in.select("classification_1992"))//.where(activacion.eq(1).and(get_mask(1992, image_in, [21])), 9))
+          .addBands(image_in.select("classification_1993"))//.where(activacion.eq(1).and(get_mask(1993, image_in, [21])), 9))
+          .addBands(image_in.select("classification_1994"))//.where(activacion.eq(1).and(get_mask(1994, image_in, [21])), 9))
+          .addBands(image_in.select("classification_1995"))//.where(activacion.eq(1).and(get_mask(1995, image_in, [21])), 9))
+          .addBands(image_in.select("classification_1996"))//.where(activacion.eq(1).and(get_mask(1996, image_in, [21])), 9))
+          .addBands(image_in.select("classification_1997").where(activacion.eq(1).and(get_mask(1997, image_in, [15,18])), 9))
+          .addBands(image_in.select("classification_1998").where(activacion.eq(1).and(get_mask(1998, image_in, [15,18])), 9))
+          .addBands(image_in.select("classification_1999").where(activacion.eq(1).and(get_mask(1999, image_in, [15,18])), 9))
+          .addBands(image_in.select("classification_2000").where(activacion.eq(1).and(get_mask(2000, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2001").where(activacion.eq(1).and(get_mask(2001, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2002").where(activacion.eq(1).and(get_mask(2002, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2003").where(activacion.eq(1).and(get_mask(2003, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2004").where(activacion.eq(1).and(get_mask(2004, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2005").where(activacion.eq(1).and(get_mask(2005, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2006").where(activacion.eq(1).and(get_mask(2006, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2007").where(activacion.eq(1).and(get_mask(2007, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2008").where(activacion.eq(1).and(get_mask(2008, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2009").where(activacion.eq(1).and(get_mask(2009, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2010").where(activacion.eq(1).and(get_mask(2010, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2011").where(activacion.eq(1).and(get_mask(2011, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2012").where(activacion.eq(1).and(get_mask(2012, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2013").where(activacion.eq(1).and(get_mask(2013, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2014").where(activacion.eq(1).and(get_mask(2014, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2015").where(activacion.eq(1).and(get_mask(2015, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2016").where(activacion.eq(1).and(get_mask(2016, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2017").where(activacion.eq(1).and(get_mask(2017, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2018").where(activacion.eq(1).and(get_mask(2018, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2019").where(activacion.eq(1).and(get_mask(2019, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2020").where(activacion.eq(1).and(get_mask(2020, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2021").where(activacion.eq(1).and(get_mask(2021, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2022").where(activacion.eq(1).and(get_mask(2022, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2023").where(activacion.eq(1).and(get_mask(2023, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2024").where(activacion.eq(1).and(get_mask(2024, image_in, [15,18,22])), 9))
+          .addBands(image_in.select("classification_2025").where(activacion.eq(1).and(get_mask(2025, image_in, [15,18,22])), 9))
+    var  agMap = output   // 18
+ //  Map.addLayer(get_mask(2001, image_in, [18]), {}, 'vegMap')
+ //  Map.addLayer(activacion, {}, 'activacion')
+ //  Map.addLayer(moda_ag_pr, {}, 'moda_ag_pr')
+  
+   agMap = agMap.updateMask(agMap.neq(0)) 
+    
+   image_in = image_in.where(agMap, agMap).clip(limite);
+  //
+
+
+    Map.addLayer(image_in,vis1,'freq_agr_forest ' + regiao, false)
+
+    var clase_dif = 9
+
+
+    var img_dif = diferenca(img_antes,image_in,clase_dif)//.clip(limite)
+
+
+    Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif filtro freq_agr_forest  ' + String(clase_dif), false)
+
+     
+    
+   // Map.addLayer(image_in,vis1,'Filtro freqForest' + regiao, false)
+    
+   //var clase_dif = 9
+   // var img_dif = diferenca(img_antes,image_in,clase_dif)//.clip(limite)
+   // Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif freqPr clase ' + String(clase_dif), false)
+
+  }
+  
+*/
+ //************************************************************
+//************************************************************
+//************************************************************
+//**********************************************
+// FILTRO DE FRECUENCIA FORESTACIÓN / AGRICULTURA
+//
+// Corrige interrupciones temporales dentro de
+// zonas predominantemente forestadas.
+//
+// CLASES:
+//
+// 3  = bosque
+// 9  = forestación
+// 12 = pastizal
+// 15 = pastura
+// 18 = agricultura
+// 22 = área no vegetada
+//
+// IMPORTANTE:
+//
+// 12 NO participa en "forestación joven".
+//
+// 12 SÍ puede convertirse a 9 cuando forma parte
+// de una ventana de interrupción/cosecha dentro
+// de una forestación establecida.
+//
+// Ejemplo:
+//
+// 9 9 9 | 18 12 12 | 9 9 9
+//
+// pasa a:
+//
+// 9 9 9 |  9  9  9 | 9 9 9
+//
+//**********************************************
+
+// ES: Filtro de forestación activo: evalúa patrones anuales sobre imgBase fija, sin realimentación dentro de este bloque.
+// EN: Active plantation filter: evaluates annual patterns against fixed imgBase, without feedback within this block.
+if (aplicar.freqForest_agr) {
+
+  var imgBase = image_in;
+
+
+  //==========================================================
+  // FUNCIONES AUXILIARES
+  //==========================================================
+
+// ES: Devuelve la banda del año solicitado de la imagen base de este filtro.
+// EN: Returns the requested annual band from this filter’s base image.
+  function banda(año) {
+    return imgBase.select("classification_" + año);
+  }
+
+
+// ES: Máscara de presencia de clase 9 en el año.
+// EN: Mask of class 9 presence in the year.
+  function forest(año) {
+    return banda(año).eq(9);
+  }
+
+
+  // Candidatos para FORESTACIÓN JOVEN.
+  //
+  // IMPORTANTE:
+  // NO incluye clase 12.
+  //
+  function candidatoCambio(año) {
+
+    var img = banda(año);
+// ES: Candidatos a adelantar forestación: 3, 15, 18 y 22; excluye 12. Es una regla inferida, no evidencia independiente de plantación.
+// EN: Candidates for backdating plantations: 3, 15, 18 and 22; excludes 12. This is an inferred rule, not independent planting evidence.
+
+    return img.eq(3)
+      .or(img.eq(15))
+      .or(img.eq(18))
+      .or(img.eq(22));
+  }
+
+
+  // Candidatos para INTERRUPCIONES / COSECHA.
+  //
+  // Aquí SÍ incluimos clase 12.
+  //
+  function candidatoInterrupcion(año) {
+
+    var img = banda(año);
+// ES: Candidatos a interrupción: incluye también 12.
+// EN: Interruption candidates: also includes 12.
+
+    return img.eq(3)
+      .or(img.eq(12))
+      .or(img.eq(15))
+      .or(img.eq(18))
+      .or(img.eq(22));
+  }
+
+
+  // Frecuencia reciente de forestación
+// ES: Exige más de 50% de clase 9 en 2017–2025: al menos cinco de nueve años si todas las bandas son válidas.
+// EN: Requires over 50% class 9 in 2017–2025: at least five of nine years if all bands are valid.
+  var freqForest = forFreq4.gt(50);
+
+
+  // Lista de años
+  var años = [];
+
+  for (var y = 1985; y <= 2025; y++) {
+    años.push(y);
+  }
+
+
+  var bandasSalida = [];
+
+
+  //==========================================================
+  // PROCESAMIENTO AÑO POR AÑO
+  //==========================================================
+
+  años.forEach(function(año) {
+
+    var actual = banda(año);
+
+    var candCambio =
+// ES: Acumula con OR las condiciones que autorizan reemplazar el año actual por 9.
+// EN: Combines with OR the conditions authorizing replacement of the current year with 9.
+      candidatoCambio(año);
+
+    var candInterrupcion =
+      candidatoInterrupcion(año);
+
+    var activar = ee.Image(0);
+
+
+    //========================================================
+    // 1. FORESTACIÓN JOVEN - 1 AÑO
+    //
+    // Ejemplo:
+    //
+    // 18 | 9 | 9 | 9
+    //
+    // 18 -> 9
+    //
+    // IMPORTANTE:
+    // 12 NO puede activar esta condición.
+    //========================================================
+
+    if (año <= 2022) {
+
+      var joven1 =
+        candCambio
+          .and(forest(año + 1))
+// ES: Regla joven1: el candidato debe estar seguido por tres años con clase 9.
+// EN: joven1 rule: the candidate must be followed by three years of class 9.
+          .and(forest(año + 2))
+          .and(forest(año + 3));
+
+      activar = activar.or(joven1);
+    }
+
+
+    //========================================================
+    // 2. FORESTACIÓN JOVEN - 2 AÑOS
+    //
+    // Ejemplo:
+    //
+    // 18 | 18 | 9 | 9
+    //
+    // 18 18 -> 9 9
+    //
+    // Nuevamente:
+    // 12 NO participa.
+    //========================================================
+
+    if (año <= 2021) {
+
+      var joven2 =
+        candCambio
+          .and(candidatoCambio(año + 1))
+          .and(forest(año + 2))
+          .and(forest(año + 3))
+          .and(forest(año + 4));
+
+      activar = activar.or(joven2);
+// ES: Regla joven2: dos candidatos seguidos por tres años de clase 9; el dibujo original muestra solo dos.
+// EN: joven2 rule: two candidates followed by three years of class 9; the original sketch shows only two.
+    }
+
+
+    //========================================================
+    // 3. VENTANA HISTÓRICA DE 2 AÑOS
+    //
+    // Detectamos:
+    //
+    // 9 9 9 | X X | 9 9 9 9
+    //
+    // X puede ser:
+    // 3, 12, 15, 18 o 22
+    //
+    // La ventana se detecta completa.
+    //
+    // Esto permite:
+    //
+    // 9 9 9 | 18 12 | 9 9 9 9
+    //
+    // convertir AMBOS:
+    //
+    // 9 9 9 |  9  9 | 9 9 9 9
+    //========================================================
+
+
+    // -------------------------------------------------------
+    // 3a. Actual = PRIMER año de la ventana
+    //
+    // 9 9 9 | X X | 9 9 9 9
+    //          ^
+    //        actual
+    // -------------------------------------------------------
+
+    if (año >= 1988 && año <= 2021) {
+
+      var int2_inicio =
+        candidatoInterrupcion(año)
+          .and(candidatoInterrupcion(año + 1))
+
+          .and(forest(año - 1))
+          .and(forest(año - 2))
+          .and(forest(año - 3))
+
+          .and(forest(año + 2))
+          .and(forest(año + 3))
+          .and(forest(año + 4));
+
+// ES: Ventana histórica de dos candidatos, con tres años de clase 9 a cada lado; se evalúan ambas posiciones.
+// EN: Historical window of two candidates, with three class-9 years on each side; both positions are evaluated.
+      activar = activar.or(int2_inicio);
+    }
+
+
+    // -------------------------------------------------------
+    // 3b. Actual = SEGUNDO año de la ventana
+    //
+    // 9 9 9 | X X | 9 9 9 9
+    //            ^
+    //          actual
+    //
+    // La ventana comenzó en año-1.
+    // -------------------------------------------------------
+
+    if (año >= 1989 && año <= 2022) {
+
+      var int2_fin =
+        candidatoInterrupcion(año - 1)
+          .and(candidatoInterrupcion(año))
+
+          .and(forest(año - 2))
+          .and(forest(año - 3))
+          .and(forest(año - 4))
+
+          .and(forest(año + 1))
+          .and(forest(año + 2))
+          .and(forest(año + 3));
+
+      activar = activar.or(int2_fin);
+    }
+
+
+    //========================================================
+    // 4. VENTANA HISTÓRICA DE 3 AÑOS
+    //
+    // Detectamos:
+    //
+    // 9 9 9 | X X X | 9 9 9
+    //
+    // donde X puede incluir 12.
+    //
+    // Ejemplo fundamental:
+    //
+    // 9 9 9 | 18 12 12 | 9 9 9
+    //
+    // Los TRES pasan a 9.
+    //========================================================
+
+
+    // -------------------------------------------------------
+    // 4a. Actual = PRIMER año
+    //
+    // 9 9 9 | X X X | 9 9 9
+    //          ^
+    // -------------------------------------------------------
+
+    if (año >= 1988 && año <= 2020) {
+
+      var int3_inicio =
+        candidatoInterrupcion(año)
+          .and(candidatoInterrupcion(año + 1))
+          .and(candidatoInterrupcion(año + 2))
+
+          .and(forest(año - 1))
+          .and(forest(año - 2))
+          .and(forest(año - 3))
+
+          .and(forest(año + 3))
+          .and(forest(año + 4))
+          .and(forest(año + 5));
+
+      activar = activar.or(int3_inicio);
+    }
+
+// ES: Ventana histórica de tres candidatos, con tres años de clase 9 a cada lado; se evalúan las tres posiciones.
+// EN: Historical window of three candidates, with three class-9 years on each side; all three positions are evaluated.
+
+    // -------------------------------------------------------
+    // 4b. Actual = SEGUNDO año
+    //
+    // 9 9 9 | X X X | 9 9 9
+    //            ^
+    //
+    // La ventana comenzó en año-1.
+    // -------------------------------------------------------
+
+    if (año >= 1989 && año <= 2021) {
+
+      var int3_medio =
+        candidatoInterrupcion(año - 1)
+          .and(candidatoInterrupcion(año))
+          .and(candidatoInterrupcion(año + 1))
+
+          .and(forest(año - 2))
+          .and(forest(año - 3))
+          .and(forest(año - 4))
+
+          .and(forest(año + 2))
+          .and(forest(año + 3))
+          .and(forest(año + 4));
+
+      activar = activar.or(int3_medio);
+    }
+
+
+    // -------------------------------------------------------
+    // 4c. Actual = TERCER año
+    //
+    // 9 9 9 | X X X | 9 9 9
+    //              ^
+    //
+    // La ventana comenzó en año-2.
+    // -------------------------------------------------------
+
+    if (año >= 1990 && año <= 2022) {
+
+      var int3_fin =
+        candidatoInterrupcion(año - 2)
+          .and(candidatoInterrupcion(año - 1))
+          .and(candidatoInterrupcion(año))
+
+          .and(forest(año - 3))
+          .and(forest(año - 4))
+          .and(forest(año - 5))
+
+          .and(forest(año + 1))
+          .and(forest(año + 2))
+          .and(forest(año + 3));
+
+      activar = activar.or(int3_fin);
+    }
+
+
+    //========================================================
+    // 5. COSECHA / INTERRUPCIÓN RECIENTE
+    //
+    // Desde 2016.
+    //
+    // También se corrige para que una ventana de 2 o 3 años
+    // se detecte completa.
+    //
+    // Aquí usamos freqForest.
+    //========================================================
+
+
+    if (año >= 2016) {
+// ES: Desde 2016, las reglas recientes exigen tres años previos de forestación y frecuencia reciente alta, sin exigir recuperación posterior. Pueden ocultar conversiones reales.
+// EN: From 2016, recent rules require three preceding plantation years and high recent frequency, without requiring later recovery. They may hide real conversions.
+
+
+      //======================================================
+      // 5.1 UNA SOLA INTERRUPCIÓN
+      //
+      // 9 9 9 | X | ...
+      //======================================================
+
+      var cosecha1 =
+        candInterrupcion
+          .and(forest(año - 1))
+          .and(forest(año - 2))
+          .and(forest(año - 3))
+          .and(freqForest);
+
+      activar = activar.or(cosecha1);
+
+
+      //======================================================
+      // 5.2 VENTANA RECIENTE DE 2 AÑOS
+      //
+      // 9 9 9 | X X
+      //
+      // Detectamos ambos años por separado, pero siempre
+      // comprobando la ventana completa.
+      //======================================================
+
+
+      // PRIMER año
+      if (año <= 2024) {
+
+        var cosecha2_inicio =
+          candInterrupcion
+            .and(candidatoInterrupcion(año + 1))
+
+            .and(forest(año - 1))
+            .and(forest(año - 2))
+            .and(forest(año - 3))
+
+            .and(freqForest);
+
+        activar = activar.or(cosecha2_inicio);
+      }
+
+
+      // SEGUNDO año
+      if (año >= 2017) {
+
+        var cosecha2_fin =
+          candidatoInterrupcion(año - 1)
+            .and(candInterrupcion)
+
+            .and(forest(año - 2))
+            .and(forest(año - 3))
+            .and(forest(año - 4))
+
+            .and(freqForest);
+
+        activar = activar.or(cosecha2_fin);
+      }
+
+
+      //======================================================
+      // 5.3 VENTANA RECIENTE DE 3 AÑOS
+      //
+      // 9 9 9 | X X X
+      //
+      // X puede ser:
+      // 18 12 12
+      // 12 18 12
+      // 12 12 18
+      // etc.
+      //======================================================
+
+
+      // PRIMER año
+      if (año <= 2023) {
+
+        var cosecha3_inicio =
+          candInterrupcion
+            .and(candidatoInterrupcion(año + 1))
+            .and(candidatoInterrupcion(año + 2))
+
+            .and(forest(año - 1))
+            .and(forest(año - 2))
+            .and(forest(año - 3))
+
+            .and(freqForest);
+
+        activar = activar.or(cosecha3_inicio);
+      }
+
+
+      // SEGUNDO año
+      if (año >= 2017 && año <= 2024) {
+
+        var cosecha3_medio =
+          candidatoInterrupcion(año - 1)
+            .and(candInterrupcion)
+            .and(candidatoInterrupcion(año + 1))
+
+            .and(forest(año - 2))
+            .and(forest(año - 3))
+            .and(forest(año - 4))
+
+            .and(freqForest);
+
+        activar = activar.or(cosecha3_medio);
+      }
+
+
+      // TERCER año
+      if (año >= 2018) {
+
+        var cosecha3_fin =
+          candidatoInterrupcion(año - 2)
+            .and(candidatoInterrupcion(año - 1))
+            .and(candInterrupcion)
+
+            .and(forest(año - 3))
+            .and(forest(año - 4))
+            .and(forest(año - 5))
+
+            .and(freqForest);
+
+        activar = activar.or(cosecha3_fin);
+      }
+    }
+
+
+    //========================================================
+    // 6. SEGURIDAD
+    //
+    // Solo permitimos cambiar a 9 las clases que definimos
+    // como candidatas a interrupción.
+    //
+    // Esto incluye 12.
+    //
+    // No afecta a la lógica de forestación joven porque
+    // allí 12 nunca entra en activar.
+    //========================================================
+
+// ES: Restringe el reemplazo final a las clases candidatas y conserva los restantes valores.
+// EN: Restricts final replacement to candidate classes and preserves other values.
+    activar =
+      activar.and(candidatoInterrupcion(año));
+
+
+    //========================================================
+    // 7. REEMPLAZAR POR 9
+    //========================================================
+
+    var salida =
+      actual
+        .where(activar, 9)
+        .rename("classification_" + año);
+
+
+    bandasSalida.push(salida);
+
+  });
+
+
+  //==========================================================
+  // 8. RECONSTRUIR IMAGEN
+  //==========================================================
+
+  var output =
+    ee.Image.cat(bandasSalida);
+
+
+  image_in =
+    output.clip(limite);
+
+
+   //==========================================================
+  // VISUALIZACIÓN
+  //==========================================================
+
+  Map.addLayer(
+    image_in,
+    vis1,
+    'freq_agr_forest ' + regiao,
+    false
+  );
+
+// ES: Reconstruye las 41 bandas anuales a partir de la lista de resultados.
+// EN: Reconstructs the 41 annual bands from the result list.
+
+  //==========================================================
+  // DIFERENCIA
+  //==========================================================
+
+  var clase_dif = 9;
+
+
+  var img_dif =
+    diferenca(
+      img_antes,
+      image_in,
+      clase_dif
+    );
+
+
+  Map.addLayer(
+    img_dif.clip(limite),
+    vischange,
+    'Dif filtro freq_agr_forest ' +
+    String(clase_dif),
+    false
+  );
+
+}
+  
+    
+         //**********************************************
+  //******** Reras do filtro de frequencia Saca forestacion de bosque
+  //**********************************************
+  
+    if (aplicar.freqBC){
+      
+     
+    var vegMask51 = ee.Image(0)
+                         .where(
+                         (forestacionFreq
+                         .add(bosqueFreq))
+                         .gt(90), 1)
+                         
+    var  vegMap51 =ee.Image(0)
+                        .where(vegMask51.eq(1).and(bosqueFreq.gt(50)), 3)
+  
+    vegMap51 = vegMap51.updateMask(vegMap51.neq(0))
+
+    image_in = image_in.where(vegMap51, vegMap51)
+
+// ES: Si bosque+forestación supera 90% y bosque supera 50%, asigna 3 a toda la serie bajo esa máscara.
+// EN: If forest+plantation exceeds 90% and forest exceeds 50%, assigns 3 throughout the series under that mask.
+    Map.addLayer(image_in,vis1,'Filtro freqBC' + regiao, false)
+   
+    var clase_dif = 3
+    var img_dif = diferenca(img_antes,image_in,clase_dif)//.clip(limite)
+    Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif freqBC clase ' + String(clase_dif), false)
+    
+  
+
+
+  }
+  
+  
+  
+    //**********************************************
+  //******** Reras do filtro de frequencia humedal-arroz
+  //**********************************************
+  // problemas associados a agricultura en area humeda
+  // es un filtro agresivo, asi que se aplica sobre un poligono
+    if (aplicar.arroz_ah_pz){
+
+  //    var mask6 = ee.Image(0)
+  //                         .where((      
+  //                                       anvFreq.lte(30)
+  //                                  
+  //                                  )
+  //                         , 1)   
+  // Antropicas > 20%
+      var mask_AH = ee.Image(0)
+                           .where(((umiFreq 
+                                    .add(grassFreq)
+                                    .add(agricFreq)
+                                    .add(pastFreq)
+                                    )
+                           .gte(90)
+                           .and(image_incidence.select('incidence').gt(10))),
+                             1)
+      var  vegMap_Arroz = ee.Image(0)
+                            .where(mask_AH.eq(1).and(agricFreq.gt(60)) 
+                            , 1)
+  
+  /////Mapa base:
+    var activacion = vegMap_Arroz//.and(mask6_2)
+
+   //si en el año es humedal o pastizal, deberia ser agriculura.
+   
+    var  output =   
+                    image_in.select("classification_1985").where(activacion.eq(1).and(get_mask(1985, image_in, [11])), moda_ag_um)
+          .addBands(image_in.select("classification_1986").where(activacion.eq(1).and(get_mask(1986, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_1987").where(activacion.eq(1).and(get_mask(1987, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_1988").where(activacion.eq(1).and(get_mask(1988, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_1989").where(activacion.eq(1).and(get_mask(1989, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_1990").where(activacion.eq(1).and(get_mask(1990, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_1991").where(activacion.eq(1).and(get_mask(1991, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_1992").where(activacion.eq(1).and(get_mask(1992, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_1993").where(activacion.eq(1).and(get_mask(1993, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_1994").where(activacion.eq(1).and(get_mask(1994, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_1995").where(activacion.eq(1).and(get_mask(1995, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_1996").where(activacion.eq(1).and(get_mask(1996, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_1997").where(activacion.eq(1).and(get_mask(1997, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_1998").where(activacion.eq(1).and(get_mask(1998, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_1999").where(activacion.eq(1).and(get_mask(1999, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2000").where(activacion.eq(1).and(get_mask(2000, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2001").where(activacion.eq(1).and(get_mask(2001, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2002").where(activacion.eq(1).and(get_mask(2002, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2003").where(activacion.eq(1).and(get_mask(2003, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2004").where(activacion.eq(1).and(get_mask(2004, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2005").where(activacion.eq(1).and(get_mask(2005, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2006").where(activacion.eq(1).and(get_mask(2006, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2007").where(activacion.eq(1).and(get_mask(2007, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2008").where(activacion.eq(1).and(get_mask(2008, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2009").where(activacion.eq(1).and(get_mask(2009, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2010").where(activacion.eq(1).and(get_mask(2010, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2011").where(activacion.eq(1).and(get_mask(2011, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2012").where(activacion.eq(1).and(get_mask(2012, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2013").where(activacion.eq(1).and(get_mask(2013, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2014").where(activacion.eq(1).and(get_mask(2014, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2015").where(activacion.eq(1).and(get_mask(2015, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2016").where(activacion.eq(1).and(get_mask(2016, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2017").where(activacion.eq(1).and(get_mask(2017, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2018").where(activacion.eq(1).and(get_mask(2018, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2019").where(activacion.eq(1).and(get_mask(2019, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2020").where(activacion.eq(1).and(get_mask(2020, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2021").where(activacion.eq(1).and(get_mask(2021, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2022").where(activacion.eq(1).and(get_mask(2022, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2023").where(activacion.eq(1).and(get_mask(2023, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2024").where(activacion.eq(1).and(get_mask(2024, image_in, [11])), moda_ag_um))
+          .addBands(image_in.select("classification_2025").where(activacion.eq(1).and(get_mask(2025, image_in, [11])), moda_ag_um))
+          
+    var  anv6Map = output   
+ //  Map.addLayer(get_mask(2001, image_in, [18]), {}, 'vegMap')
+ //  Map.addLayer(activacion, {}, 'activacion')
+ //  Map.addLayer(moda_ag_pr, {}, 'moda_ag_pr')
+  
+   anv6Map = anv6Map.updateMask(anv6Map.neq(0)) 
+    
+   image_in = image_in.where(anv6Map, anv6Map);
+  //
+  // vegMap51 = vegMap51.updateMask(vegMap51.neq(0))
+
+  // image_in = image_in.where(vegMap51, vegMap51)
+
+    Map.addLayer(image_in,vis1,'freq_arroz_AH ' + regiao, false)
+
+    var clase_dif =18
+
+
+    var img_dif = diferenca(img_antes,image_in,clase_dif)//.clip(limite)
+
+
+    Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif filtro freq_arroz_AH clase  ' + String(clase_dif), false)
+
+     
+  }
+
+//*****************************************************************
+// Filtro bosque adentro de área húmeda
+//*****************************************************************
+  if (aplicar.Bosq_AH){ 
+  var vegMask51 = ee.Image(0)
+                         .where((umiFreq
+                         .add(agricFreq)
+                         .add(pastFreq)
+                         )
+                         .gt(85), 1)
+  
+var image_moda = image_in.reduce(ee.Reducer.mode())
+var vegMap51 = ee.Image(0)
+                        .where(vegMask51.eq(1)
+                        .and(bosqueFreq
+// ES: Corrección específica de 1985: requiere coincidencia de 1987 y 1988, ambos distintos de 22.
+// EN: Specific 1985 correction: requires agreement between 1987 and 1988, both different from 22.
+                        .lt(20)), image_moda)
+
+vegMap51 = vegMap51.updateMask(vegMap51.neq(0))
+
+image_in = image_in.where(vegMap51.and(image_in.eq(3)), vegMap51)
+
+ 
+    Map.addLayer(image_in,vis1,'Filtro freqBosq_AH' + regiao, false)
+   
+    var clase_dif = 3
+    var img_dif = diferenca(img_antes,image_in,clase_dif).clip(limite)
+    Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif freqBosq_AH clase ' + String(clase_dif), false)
+
+}
+
+//*****************************************************************
+ // ------- Filtro temporal 1985 clase 22: reemplaza solo si 87 y 88 son la misma clase (y distinta de 22)
+//*****************************************************************
+
+if (aplicar.FiltroTemp1985) {
+  
+var c85 = image_in.select('classification_1985');
+var c87 = image_in.select('classification_1987');
+var c88 = image_in.select('classification_1988');
+
+// máscara: 1985 es 22
+var is85_22 = c85.eq(22);
+
+// máscara: 87 y 88 son iguales
+var same87_88 = c87.eq(c88);
+
+
+var common_not_22 = c87.neq(22);
+
+
+var cond_replace = is85_22.and(same87_88).and(common_not_22);
+
+
+var replacement = c87;
+// ES: PZBA6 no utiliza seis años efectivos: compara y−2, y−1, y e y+1. Solo se aplica a clase 15.
+// EN: PZBA6 does not use six effective years: it compares y−2, y−1, y and y+1. Applied only to class 15.
+
+
+var c85_new = c85.where(cond_replace, replacement);
+
+
+image_in = image_in.addBands(c85_new, null, true).clip(limite);
+
+
+
+Map.addLayer(image_in,vis1,'Clase_22_1985' + regiao, false)
+ 
+  var clase_dif = 22;
+  var img_dif_1985 = diferenca(img_antes, image_in, clase_dif).clip(limite);
+  Map.addLayer(img_dif_1985.mask(raster_zona), vischange, 'Dif Filtro Temporal 1985_clase22 Z' + regiao, false);
+}
+  
+//*****************************************************************  
+// Prueba filtro movil para corregir pastizal
+//*****************************************************************
+
+if (aplicar.PZBA6){
+      
+       var nom_filtro = 'PZBA6'    
+       var mask6 = function(valor, ano, imagem){
+          var mask = imagem.select('classification_'+ (parseInt(ano) - 2)).eq (valor)
+               .and(imagem.select('classification_'+ (parseInt(ano) - 1)).eq(valor))
+                .and(imagem.select('classification_'+ (ano)              ).neq(valor))
+                .and(imagem.select('classification_'+ (parseInt(ano) + 1)).eq(valor))
+           //   .and(imagem.select('classification_'+ (parseInt(ano) + 2)).eq(valor))
+             //  .and(imagem.select('classification_'+ (parseInt(ano) + 3)).eq (valor))
+          var muda_img  = imagem.select('classification_'+ (ano)              ).mask(mask.eq(1)).where(mask.eq(1), valor);  
+          var muda_img1 = imagem.select('classification_'+ (parseInt(ano) + 1)).mask(mask.eq(1)).where(mask.eq(1), valor);  
+          var img_out = imagem.select('classification_'+ano).blend(muda_img).blend(muda_img1)
+         
+          Map.addLayer(mask.selfMask(), {palette:['red']}, 'Pixels corregidos '+ano+' clase '+valor, false);
+         
+          return img_out;
+        }
+        
+        var anos3 = ['1986','1987','1988','1989','1990','1991','1992','1993','1994','1995','1996','1997','1998', '1999', '2000', '2001','2002','2003','2004','2005','2006','2007','2008','2009','2010','2011','2012','2013','2014','2015','2016','2017','2018', '2019','2020', '2021', '2022', '2023', '2024']
+        var anos6 = ['1987','1988','1989','1990','1991','1992','1993','1994','1995','1996','1997','1998', '1999', '2000', '2001','2002','2003','2004','2005','2006','2007','2008','2009','2010','2011','2012','2013','2014','2015','2016','2017', '2018', '2019', '2020', '2021' ]
+        
+        var window6years = function(imagem, valor){
+           var img_out = imagem.select('classification_1985')
+           var img_out = img_out.addBands(imagem.select('classification_1986'))
+        
+           for (var i_ano=0;i_ano<anos6.length; i_ano++){  
+             var ano = anos6[i_ano];  
+             img_out = img_out.addBands(mask6(valor,ano, imagem)) }
+             img_out = img_out.addBands(imagem.select('classification_2022'))
+             img_out = img_out.addBands(imagem.select('classification_2023'))
+             img_out = img_out.addBands(imagem.select('classification_2024'))
+             img_out = img_out.addBands(imagem.select('classification_2025'))
+           return img_out
+        }
+        
+        
+        //put "classification_2018 in the end of bands after gap fill
+        var original = image_in.select('classification_1985')
+        for (var i_ano=0;i_ano<anos3.length; i_ano++){  
+          var ano = anos3[i_ano]; 
+          original = original.addBands(image_in.select('classification_'+ano)) 
+        }
+        original = original.addBands(image_in.select('classification_2025'))
+        
+        var image_in = original
+        
+        image_in = window6years(image_in, 15)
+        //image_in = window6years(image_in, 12)
+
+   
+
+    Map.addLayer(image_in,vis1,'Filtro ' + nom_filtro + 'Z-' + regiao, false)
+// ES: Suavizado de clases aisladas 12 y 15 mediante moda local; vecinos distintos de la clase objetivo no necesariamente iguales entre sí.
+// EN: Smooths isolated classes 12 and 15 with local mode; neighbors differing from the target class need not match each other.
+
+   var clase_dif = 15
+    var img_dif = diferenca(img_antes,image_in,clase_dif)//.clip(limite)
+ Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif filtro PZBA6 clase ' + String(clase_dif), false)
+    
+  }
+  
+  if (aplicar.FiltroTemp3) {
+  
+  var startYear = 1985;
+  var endYear = 2025;
+  var clasesObjetivo = [12, 15]; // solo estas clases
+
+  // ---------- Construir lista de bandas y seleccionar
+  var years = [];
+// ES: Moda de ventana centrada, acotada al intervalo de años disponible.
+// EN: Centered-window mode, bounded by the available year interval.
+  for (var y = startYear; y <= endYear; y++) {
+    years.push('classification_' + y);
+  }
+  var fixed = image_in.select(years);
+ // print('Bandas iniciales:', fixed.bandNames());
+
+  // ---------- Función para calcular moda de ventana 5 años centrada en y
+  function windowMode(img, year) {
+    var minYear = Math.max(year - 2, startYear);
+    var maxYear = Math.min(year + 2, endYear);
+    var windowBands = [];
+    for (var yy = minYear; yy <= maxYear; yy++) {
+// ES: Extiende las ventanas de borde hasta cinco años cuando es posible.
+// EN: Extends edge windows to five years when possible.
+      windowBands.push('classification_' + yy);
+    }
+    var windowImg = img.select(windowBands);
+    return windowImg.reduce(ee.Reducer.mode());
+  }
+
+  // ---------- Función para calcular moda extendida en bordes
+  function windowModeBorde(img, year) {
+    var windowSize = 5;
+    var half = Math.floor(windowSize / 2);
+    var minYear = Math.max(startYear, year - half);
+    var maxYear = Math.min(endYear, year + half);
+
+    // extender la ventana para asegurar 5 bandas
+    if (maxYear - minYear + 1 < windowSize) {
+      if (minYear == startYear) {
+        maxYear = Math.min(endYear, minYear + windowSize - 1);
+      } else if (maxYear == endYear) {
+        minYear = Math.max(startYear, maxYear - windowSize + 1);
+      }
+    }
+
+    var windowBands = [];
+    for (var yy = minYear; yy <= maxYear; yy++) {
+      windowBands.push('classification_' + yy);
+    }
+// ES: Procesa años interiores a partir de la misma imagen de entrada; conserva primero y último para el tratamiento posterior.
+// EN: Processes interior years against the same input image; retains first and last for subsequent treatment.
+    var windowImg = img.select(windowBands);
+    return windowImg.reduce(ee.Reducer.mode());
+  }
+
+  // ---------- Función para reemplazar clases aisladas interiores
+  function replaceIsolatedInterior(img) {
+    var out = img.select('classification_' + startYear); // primera intacta
+
+    for (var y = startYear + 1; y <= endYear - 1; y++) {
+      var mid = img.select('classification_' + y);
+      var prev = img.select('classification_' + (y - 1));
+      var next = img.select('classification_' + (y + 1));
+
+      // máscaras para 12 y 15 aislados
+      var masks = ee.List(clasesObjetivo).map(function(cl) {
+        cl = ee.Number(cl);
+        return mid.eq(cl).and(prev.neq(cl)).and(next.neq(cl));
+      });
+
+      var mask = ee.Image(masks.get(0));
+      for (var i = 1; i < clasesObjetivo.length; i++) {
+        mask = mask.or(ee.Image(masks.get(i)));
+      }
+
+      // elegir si usa ventana normal o extendida
+      var mid_new;
+      if (y === startYear + 1 || y === endYear - 1) {
+        // casos 1986 y 2023
+        mid_new = mid.where(mask, windowModeBorde(img, y))
+                     .rename('classification_' + y);
+      } else {
+        mid_new = mid.where(mask, windowMode(img, y))
+                     .rename('classification_' + y);
+      }
+
+      out = out.addBands(mid_new);
+    }
+
+    out = out.addBands(img.select('classification_' + endYear)); // última intacta
+// ES: Extremo inicial: clases 12 y 15. Extremo final: solo clase 12; los años reales usados son 2023–2025.
+// EN: Start edge: classes 12 and 15. End edge: class 12 only; actual years used are 2023–2025.
+    return out;
+  }
+
+  // ---------- Función para reemplazar solo extremos absolutos (1985 y 2024)
+  function replaceEdges(img) {
+    // 1985
+    var b85 = img.select('classification_1985');
+    var b86 = img.select('classification_1986');
+    var b87 = img.select('classification_1987');
+
+    var masksStart = ee.List(clasesObjetivo).map(function(cl) {
+      cl = ee.Number(cl);
+      return b85.eq(cl).and(b86.neq(cl)).and(b87.neq(cl));
+    });
+
+    var maskStart = ee.Image(masksStart.get(0));
+    for (var i = 1; i < clasesObjetivo.length; i++) {
+      maskStart = maskStart.or(ee.Image(masksStart.get(i)));
+    }
+
+    var b85_new = b85.where(maskStart, windowModeBorde(img, startYear))
+                     .rename('classification_1985');
+
+    // 2025
+    var b24 = img.select('classification_2025');
+    var b23 = img.select('classification_2024');
+    var b22 = img.select('classification_2023');
+
+    var masksEnd = ee.List([12]).map(function(cl) {
+      cl = ee.Number(cl);
+      return b24.eq(cl).and(b23.neq(cl)).and(b22.neq(cl));
+// ES: ERROR CONSERVADO: b24 contiene 2025, pero b24_new se renombra classification_2024. Sobrescribe 2024 y deja 2025 sin esta corrección.
+// EN: PRESERVED ERROR: b24 contains 2025, but b24_new is renamed classification_2024. This overwrites 2024 and leaves 2025 without this correction.
+    });
+
+    var maskEnd = ee.Image(masksEnd.get(0));
+    
+
+    var b24_new = b24.where(maskEnd, windowModeBorde(img, endYear))
+                     .rename('classification_2024');
+
+    img = img.addBands(b85_new, null, true)
+             .addBands(b24_new, null, true);
+    return img;
+  }
+
+  // ---------- Aplicar cambios
+  fixed = replaceIsolatedInterior(fixed);
+  fixed = replaceEdges(fixed);
+
+  // ---------- Resultado final
+  image_in = fixed.clip(limite);
+  Map.addLayer(image_in, vis1, 'FiltroTemp3_5anosModa', false);
+ // print('Bandas resultado:', image_in.bandNames());
+  
+  
+  
+    var clase_dif = 12
+    var img_dif = diferenca(img_antes,image_in,clase_dif)//.clip(limite)
+    Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif  clase ' + String(clase_dif), false)
+    
+  /*  
+    var clase_dif = 15
+    var img_dif = diferenca(img_antes,image_in,clase_dif)//.clip(limite)
+    Map.addLayer(img_dif.mask(raster_zona),vischange,'Dif clase ' + String(clase_dif), false)
+*/
+
+  
+}
+
+
+//*****************************************************************
+ // ------- Filtro temporal 1995 clase 18: reemplaza solo si 94 y 97 son la misma clase (y distinta de 18)
+//*****************************************************************
+
+// Definí la subregión en el editor de GEE y renómbrala, por ejemplo, "subregion".
+// var subregion = /* color: #d63000 */ee.Geometry.Polygon([...]);
+
+// ES: Filtros localizados activos: requieren la geometría subregion, no definida en este archivo. Puede provenir de Imports del editor.
+// EN: Active localized filters require subregion geometry, which is not defined in this file. It may come from editor Imports.
+if (aplicar.FiltroTemp1995) {
+  
+  var c85 = image_in.select('classification_1995');
+  var c87 = image_in.select('classification_1994');
+  var c88 = image_in.select('classification_1997');
+
+  // máscara: 1995 es 18
+  var is85_22 = c85.eq(18);
+
+  // máscara: 94 y 97 son iguales
+  var same87_88 = c87.eq(c88);
+
+  // 94 diferente de 18
+  var common_not_22 = c87.neq(18);
+
+  // condición de reemplazo
+  var cond_replace = is85_22.and(same87_88).and(common_not_22);
+
+  // reemplazo con la clase de 1994
+  var replacement = c87;
+
+  // aplicar solo dentro de la subregión:
+  var mask_subregion = ee.Image.constant(1).clip(subregion);
+  var cond_replace_sub = cond_replace.updateMask(mask_subregion);
+
+  var c85_new = c85.where(cond_replace_sub, replacement);
+
+  // agregar banda modificada, recortando a todo el límite del Cristalino
+  image_in = image_in.addBands(c85_new, null, true).clip(limite);
+
+  // visualización
+  Map.addLayer(image_in, vis1, 'Clase_18_1995' + regiao, false);
+
+  var clase_dif = 18;
+  var img_dif_1995 = diferenca(img_antes, image_in, clase_dif).clip(limite);
+  Map.addLayer(img_dif_1995.mask(raster_zona), vischange,
+               'Dif Filtro Temporal 1995_clase18_Z' + regiao, false);
+}
+
+//*****************************************************************
+ // ------- Filtro temporal 1996 clase 18: reemplaza solo si 95 y 97 son la misma clase (y distinta de 18)
+//*****************************************************************
+
+if (aplicar.FiltroTemp1996) {
+  
+var c85 = image_in.select('classification_1996');
+var c87 = image_in.select('classification_1994');
+var c88 = image_in.select('classification_1997');
+
+// ES: La regla de 1996 compara efectivamente 1994 y 1997, no 1995 y 1997 como indica el título original.
+// EN: The 1996 rule actually compares 1994 and 1997, not 1995 and 1997 as stated in the original title.
+// máscara: 1995 es 18. Los nombres de las variables no corresponden. No se modificaron
+var is85_22 = c85.eq(18);
+
+// máscara: 94 y 97 son iguales
+var same87_88 = c87.eq(c88);
+
+
+var common_not_22 = c87.neq(18);
+
+
+var cond_replace = is85_22.and(same87_88).and(common_not_22);
+
+
+var replacement = c87;
+
+ // aplicar solo dentro de la subregión:
+  var mask_subregion = ee.Image.constant(1).clip(subregion);
+  var cond_replace_sub = cond_replace.updateMask(mask_subregion);
+
+
+var c85_new = c85.where(cond_replace_sub, replacement);
+
+
+image_in = image_in.addBands(c85_new, null, true).clip(limite);
+
+
+
+Map.addLayer(image_in,vis1,'Clase_18_1996' + regiao, false)
+ 
+  var clase_dif = 18;
+  var img_dif_1996 = diferenca(img_antes, image_in, clase_dif).clip(limite);
+  Map.addLayer(img_dif_1996.mask(raster_zona), vischange, 'Dif Filtro Temporal 1996_clase18_Z' + regiao, false);
+}
+
+
+//*****************************************************************
+ // ------- Filtro temporal 1999 clase 18: reemplaza solo si 98 y 00 son la misma clase (y distinta de 18)
+//*****************************************************************
+
+if (aplicar.FiltroTemp1999) {
+  
+var c85 = image_in.select('classification_1999');
+var c87 = image_in.select('classification_1998');
+var c88 = image_in.select('classification_2001');
+
+// máscara: 1999 es 18. Los nombres de las variables no corresponden. No se modificaron
+var is85_22 = c85.eq(18);
+
+// máscara: 98 y 00 son iguales
+// ES: La regla de 1999 compara efectivamente 1998 y 2001, no 2000.
+// EN: The 1999 rule actually compares 1998 and 2001, not 2000.
+var same87_88 = c87.eq(c88);
+
+
+var common_not_22 = c87.neq(18);
+
+
+var cond_replace = is85_22.and(same87_88).and(common_not_22);
+
+
+var replacement = c87;
+
+ // aplicar solo dentro de la subregión:
+  var mask_subregion = ee.Image.constant(1).clip(subregion);
+  var cond_replace_sub = cond_replace.updateMask(mask_subregion);
+
+var c85_new = c85.where(cond_replace_sub, replacement);
+
+
+image_in = image_in.addBands(c85_new, null, true).clip(limite);
+
+
+
+Map.addLayer(image_in,vis1,'Clase_18_1999' + regiao, false)
+ 
+  var clase_dif = 18;
+  var img_dif_1999 = diferenca(img_antes, image_in, clase_dif).clip(limite);
+  Map.addLayer(img_dif_1999.mask(raster_zona), vischange, 'Dif Filtro Temporal 1999_clase18_Z' + regiao, false);
+}
+
+//*****************************************************************
+// ------- Filtro temporal 2008 clase 18: reemplaza solo si 07 y 10 son la misma clase (y distinta de 18)
+//*****************************************************************
+
+if (aplicar.FiltroTemp2008) {
+  
+var c85 = image_in.select('classification_2008');
+var c87 = image_in.select('classification_2007');
+var c88 = image_in.select('classification_2010');
+
+// máscara: 2008 es 18. Los nombres de las variables no corresponden. No se modificaron
+var is85_22 = c85.eq(18);
+
+// ES: Corrección de 2008: clase 18 y coincidencia entre 2007 y 2010, dentro de subregion.
+// EN: 2008 correction: class 18 and agreement between 2007 and 2010, within subregion.
+// máscara: 07 y 10 son iguales
+var same87_88 = c87.eq(c88);
+
+
+var common_not_22 = c87.neq(18);
+
+
+var cond_replace = is85_22.and(same87_88).and(common_not_22);
+
+
+var replacement = c87;
+
+ // aplicar solo dentro de la subregión:
+  var mask_subregion = ee.Image.constant(1).clip(subregion);
+  var cond_replace_sub = cond_replace.updateMask(mask_subregion);
+
+var c85_new = c85.where(cond_replace_sub, replacement);
+
+
+image_in = image_in.addBands(c85_new, null, true).clip(limite);
+
+
+
+Map.addLayer(image_in,vis1,'Clase_18_2008' + regiao, false)
+ 
+  var clase_dif = 18;
+  var img_dif_2008 = diferenca(img_antes, image_in, clase_dif).clip(limite);
+  Map.addLayer(img_dif_2008.mask(raster_zona), vischange, 'Dif Filtro Temporal 2008_clase18_Z' + regiao, false);
+}
+
+//*****************************************************************
+// ------- Filtro temporal 2009 clase 18: reemplaza solo si 07 y 10 son la misma clase (y distinta de 18)
+//*****************************************************************
+
+if (aplicar.FiltroTemp2009) {
+  
+var c85 = image_in.select('classification_2009');
+var c87 = image_in.select('classification_2007');
+var c88 = image_in.select('classification_2010');
+
+// máscara: 2009 es 18. Los nombres de las variables no corresponden. No se modificaron
+var is85_22 = c85.eq(18);
+// ES: Corrección de 2009 con los mismos años de referencia 2007 y 2010.
+// EN: 2009 correction using the same reference years, 2007 and 2010.
+
+// máscara: 07 y 10 son iguales
+var same87_88 = c87.eq(c88);
+
+
+var common_not_22 = c87.neq(18);
+
+
+var cond_replace = is85_22.and(same87_88).and(common_not_22);
+
+
+var replacement = c87;
+
+ // aplicar solo dentro de la subregión:
+  var mask_subregion = ee.Image.constant(1).clip(subregion);
+  var cond_replace_sub = cond_replace.updateMask(mask_subregion);
+
+var c85_new = c85.where(cond_replace_sub, replacement);
+
+
+image_in = image_in.addBands(c85_new, null, true).clip(limite);
+
+
+
+Map.addLayer(image_in,vis1,'Clase_18_2009' + regiao, false)
+ 
+  var clase_dif = 18;
+  var img_dif_2009 = diferenca(img_antes, image_in, clase_dif).clip(limite);
+  Map.addLayer(img_dif_2009.mask(raster_zona), vischange, 'Dif Filtro Temporal 2009_clase18_Z' + regiao, false);
+}
+
+// ES: Agrega metadatos a la imagen final de la región. El identificador bioma conserva su espacio final.
+// EN: Adds metadata to the final regional image. The bioma identifier retains its trailing space.
+
+  //image_hand_class
+  
+  var image_out = image_in
+  
+  image_out = image_out
+    .set('collection', col)
+    .set('version', versionOut)
+    .set('biome', bioma)
+  
+  //print(image_in)
+// ES: Crea una tarea por región a 30 m, con pirámides categóricas por moda. Las tareas deben iniciarse en Tasks.
+// EN: Creates one task per region at 30 m, using categorical mode pyramids. Tasks must be started in Tasks.
+  print(image_out)
+  
+  
+  Export.image.toAsset({
+      'image': image_out,
+      'description': String(regiao) +versionOut,
+      'assetId': 'projects/mapbiomas-uruguay/assets/LAND-COVER/COLLECTION-6/WORKSPACE/MOSAICOS/Mosaicos_ConFiltro/' + 'Z_' + String(regiao) + "_" + versionOut,
+      'pyramidingPolicy': {
+          '.default': 'mode'
+      },
+      'region': limite.geometry().bounds(),
+      'scale': 30,
+      'maxPixels': 1e13
+  });
+}
