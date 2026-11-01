@@ -1,0 +1,439 @@
+// ES: Versión utilizada para identificar el asset de salida.
+// EN: Version used to identify the output asset.
+var version = '1'  
+
+// ES: Identificador de colección utilizado en la ruta y el nombre de salida.
+// EN: Collection identifier used in the output path and name.
+var colecion = '4'
+
+// ES: Selecciona el período temporal que se procesará.
+// EN: Selects the time period to process.
+var periodo = 8//1,2,3,4,5,6,7,8 valores
+
+// ES: Define el prefijo de la ruta de salida concatenando el identificador de colección.
+//     No termina en "/": el nombre de exportación se agrega directamente a este prefijo.
+// EN: Defines the output path prefix by appending the collection identifier.
+//     It does not end with "/": the export name is appended directly to this prefix.
+var dirout = 'projects/mapbiomas-uruguay/assets/LAND-COVER/COLLECTION-5/SAMPLES/C' + colecion 
+
+// ES: Carga las regiones vectoriales utilizadas para dibujar sus límites al final.
+// EN: Loads the vector regions used to draw their boundaries at the end.
+var regioesCollection = ee.FeatureCollection('projects/mapbiomas-uruguay/assets/LAND-COVER/ANCILLARY_DATA/C5/regiones_buffer_uy_ext')
+//var region = ['sedimentaria_Oeste']
+
+// ES: Importa el módulo de paletas de colores de MapBiomas.
+// EN: Imports the MapBiomas color palette module.
+var palettes = require('users/mapbiomas/modules:Palettes.js');
+//var biomes = ee.Image(assetBiomes);
+
+// ES: Configuración alternativa de visualización, actualmente desactivada.
+// EN: Alternative visualization settings, currently disabled.
+//var vis = {
+//    'bands': ['reference'],
+//    'min': 0,
+//    'max': 34,
+//    'palette': palettes.get('classification2')
+//};
+
+// ES: Carga la imagen multibanda de clasificación anual utilizada como referencia.
+// EN: Loads the multiband annual classification image used as the reference.
+var colecao = ee.Image('projects/mapbiomas-uruguay/assets/LAND-COVER/COLLECTION-5/public/mapbiomas_uruguay_collection3_v1') 
+      //.min()
+
+// ES: Muestra la imagen y sus metadatos en la consola para inspección.
+// EN: Displays the image and its metadata in the console for inspection.
+print('colecao',colecao) 
+
+// ES: Operaciones alternativas de selección y enmascaramiento, desactivadas.
+// EN: Alternative selection and masking operations, disabled.
+//colecao = ee.Image(colecao.filterMetadata('region_name','equals',region).first()).select('classification_2019')
+//print('colecao',colecao)   
+//colecao = colecao.mask(biomes.eq(2))
+
+// ES: Cada bloque define el umbral general de frecuencia, los años, los nombres
+//     de bandas y el sufijo de salida del período seleccionado.
+//     El procesamiento posterior utiliza "anos"; "bandas_anos" no se utiliza.
+// EN: Each block defines the general frequency threshold, years, band names,
+//     and output suffix for the selected period.
+//     Subsequent processing uses "anos"; "bandas_anos" is not used.
+
+// ES: Período 1: 1985–1989; umbral general de cinco observaciones.
+// EN: Period 1: 1985–1989; general threshold of five observations.
+if (periodo == 1){
+    var freq_lim = 5, 
+        anos = ['1985','1986','1987','1988','1989'], 
+        bandas_anos = ['classification_1985','classification_1986','classification_1987','classification_1988',
+                'classification_1989'], 
+        sufix = '_85_89';
+}
+
+// ES: Período 2: 1990–1994; umbral general de cinco observaciones.
+// EN: Period 2: 1990–1994; general threshold of five observations.
+if (periodo == 2){
+    var freq_lim = 5, 
+        anos = ['1990','1991','1992','1993','1994'], 
+        bandas_anos = ['classification_1990','classification_1991',
+                'classification_1992','classification_1993','classification_1994'], 
+        sufix = '_90_94';
+}
+
+
+
+// ES: Período 3: 1995–1999; umbral general de cinco observaciones.
+// EN: Period 3: 1995–1999; general threshold of five observations.
+if (periodo ==3 ){
+    var freq_lim = 5, 
+            anos = ['1995','1996','1997','1998','1999',], 
+            bandas_anos = ['classification_1995','classification_1996','classification_1997','classification_1998',
+                    'classification_1999'], 
+            sufix = '_95_99';
+}
+
+// ES: Período 4: 2000–2004; umbral general de cinco observaciones.
+// EN: Period 4: 2000–2004; general threshold of five observations.
+if (periodo ==4 ){
+    var freq_lim = 5, 
+            anos = ['2000','2001','2002','2003','2004',], 
+            bandas_anos = ['classification_2000','classification_2001','classification_2002',
+                    'classification_2003','classification_2004'], 
+            sufix = '_00_04';
+}
+
+
+// ES: Período 5: 2005–2009; umbral general de cinco observaciones.
+// EN: Period 5: 2005–2009; general threshold of five observations.
+if (periodo == 5 ){
+  var freq_lim = 5,
+              bandas_anos = ['classification_2005','classification_2006','classification_2007','classification_2008','classification_2009'
+                            
+                             ],
+              anos = ['2005','2006','2007','2008','2009'],             
+             sufix = '_05_09';
+}
+
+
+// ES: Período 6: 2010–2014; umbral general de cinco observaciones.
+// EN: Period 6: 2010–2014; general threshold of five observations.
+if (periodo == 6 ){
+  var freq_lim = 5,
+              bandas_anos = [
+                             'classification_2010','classification_2011','classification_2012','classification_2013','classification_2014'
+                             ],
+              anos = ['2010','2011','2012','2013','2014'],             
+             sufix = '_10_14';
+}
+
+
+
+// ES: Período 7: 2015–2019; umbral general de cinco observaciones.
+// EN: Period 7: 2015–2019; general threshold of five observations.
+if (periodo == 7 ){
+  var freq_lim = 5,
+              bandas_anos = ['classification_2015','classification_2016','classification_2017','classification_2018','classification_2019']
+              anos = ['2015','2016','2017','2018','2019',
+                      ]           
+          sufix = '_15_19';
+}
+
+// ES: Período 8: el procesamiento usa 2020–2024 y un umbral general de cuatro.
+//     "bandas_anos" solo enumera 2020–2023, pero no controla la selección.
+//     La imagen de entrada debe contener "classification_2024".
+// EN: Period 8: processing uses 2020–2024 and a general threshold of four.
+//     "bandas_anos" only lists 2020–2023, but does not control selection.
+//     The input image must contain "classification_2024".
+if (periodo == 8 ){
+  var freq_lim = 4,
+              bandas_anos = [
+                             'classification_2020','classification_2021','classification_2022','classification_2023']
+              anos = ['2020','2021','2022','2023','2024'
+                      ]           
+          sufix = '_20_24';
+}
+
+
+// ES: Configura la visualización de 1985, independientemente del período elegido.
+// EN: Configures the visualization of 1985, regardless of the selected period.
+var vis = {
+    'bands': ['classification_1985' ],
+    'min': 0,
+    'max': 34,
+    'palette': palettes.get('classification2')
+};
+
+// ES: Agrega la clasificación de referencia al mapa.
+// EN: Adds the reference classification to the map.
+Map.addLayer(colecao, vis,'colecao')
+
+// ES: Inicializa una lista de Earth Engine para almacenar imágenes anuales.
+// EN: Initializes an Earth Engine list to store annual images.
+var colList = ee.List([])
+
+// ES: Ejemplo desactivado de remapeo para un único año.
+// EN: Disabled example of remapping for a single year.
+//var colremap = colecao.select('classification_2000').remap(
+//          [ 2, 3, 4, 9, 11, 12, 15, 18, 21, 22, 33],
+//          [ 2, 3, 4, 9, 11, 12, 15, 18, 21, 22, 33])
+//colList = colList.add(colremap.int8())
+
+// ES: Reinicializa la lista antes de recorrer los años.
+// EN: Reinitializes the list before iterating over the years.
+var colList = ee.List([])
+//var anos = ['2001','2002','2003','2004','2005','2006','2007','2008','2009','2010','2011','2012','2013','2014','2015','2016','2017','2018','2019'];
+
+// ES: Recorre los años en el orden definido en "anos".
+// EN: Iterates over the years in the order defined in "anos".
+for (var i_ano=0;i_ano<anos.length; i_ano++){
+  var ano = anos[i_ano];
+
+  // ES: Selecciona la banda anual y conserva los códigos enumerados.
+  //     Como no se define un valor por defecto, las demás clases se enmascaran.
+  // EN: Selects the annual band and preserves the listed class codes.
+  //     Since no default value is specified, all other classes are masked.
+  var colflor = colecao.select('classification_'+ano).remap(
+          [ 2, 3, 4, 9, 11, 12, 15, 18, 21, 22, 33,79,80,83],
+          [ 2, 3, 4, 9, 11, 12, 15, 18, 21, 22, 33,79,80,83])
+
+  // ES: Convierte los códigos a enteros de 8 bits con signo y agrega la imagen.
+  // EN: Converts the codes to signed 8-bit integers and appends the image.
+  colList = colList.add(colflor.int8())
+};
+
+// ES: Convierte la lista de imágenes anuales en una colección de imágenes.
+// EN: Converts the list of annual images into an image collection.
+var collection = ee.ImageCollection(colList)
+//print(collection)
+//Map.addLayer(collection)
+
+// ES: Devuelve los valores únicos de un arreglo JavaScript, conservando
+//     el orden de su primera aparición. No se invoca en este script.
+// EN: Returns the unique values of a JavaScript array, preserving
+//     their first-occurrence order. It is not called in this script.
+var unique = function(arr) {
+    var u = {},
+        a = [];
+    for (var i = 0, l = arr.length; i < l; ++i) {
+        if (!u.hasOwnProperty(arr[i])) {
+            a.push(arr[i]);
+            u[arr[i]] = 1;
+        }
+    }
+    return a;
+};
+
+// ES: Carga el raster utilizado para excluir áreas de la clase 15.
+// EN: Loads the raster used to exclude areas from class 15.
+var bajos = ee.Image('projects/mapbiomas-uruguay/assets/BajosRaster4326');
+
+/**
+ * REFERENCE MAP
+ */
+
+// ES: Genera una imagen de referencia para una clase.
+//     Para la clase 15 exige al menos una secuencia de tres años consecutivos
+//     y aplica la exclusión de bajos. Para las demás clases utiliza el número
+//     total de ocurrencias, sin exigir que sean consecutivas.
+//     La salida contiene el código de clase; no contiene el conteo de años.
+// EN: Generates a reference image for one class.
+//     Class 15 requires at least one sequence of three consecutive years
+//     and applies the lowland exclusion. Other classes use the total number
+//     of occurrences, without requiring consecutive years.
+//     The output contains the class code, not the year count.
+var getFrenquencyMask = function(collection, classId) {
+
+  // ES: Convierte el identificador de clase de texto a entero decimal.
+  // EN: Converts the class identifier from a string to a decimal integer.
+  var classIdInt = parseInt(classId, 10);
+
+  // ES: Para cada imagen anual, devuelve 1 donde aparece la clase y 0 donde
+  //     aparece otra clase válida. Los píxeles enmascarados siguen enmascarados.
+  // EN: For each annual image, returns 1 where the class occurs and 0 where
+  //     another valid class occurs. Masked pixels remain masked.
+  var maskCollection = collection.map(function(image) {
+    return image.eq(classIdInt);
+  });
+
+  // ES: Aplica el criterio especial de persistencia para la clase 15.
+  // EN: Applies the special persistence criterion for class 15.
+  if (classIdInt === 15) {
+
+  // ES: Convierte la colección en lista para acceder a años por su posición.
+  // EN: Converts the collection to a list to access years by their position.
+  var list = maskCollection.toList(maskCollection.size());
+
+  // ES: Inicializa la imagen que acumulará las secuencias válidas.
+  // EN: Initializes the image that will accumulate valid sequences.
+  var consecutiveMask = ee.Image(0);
+
+  // ES: Recorre todas las ventanas de tres posiciones consecutivas.
+  //     Su interpretación como años consecutivos depende del orden de "anos".
+  // EN: Iterates over all windows of three consecutive positions.
+  //     Their interpretation as consecutive years depends on the order of "anos".
+  for (var i = 0; i < (anos.length - 2); i++) {
+    var img1 = ee.Image(list.get(i));
+    var img2 = ee.Image(list.get(i + 1));
+    var img3 = ee.Image(list.get(i + 2));
+
+    // ES: Identifica la presencia de la clase en las tres imágenes de la ventana.
+    // EN: Identifies class presence in all three images of the window.
+    var triple = img1.and(img2).and(img3);
+
+    // ES: Acumula las ventanas mediante OR. Las operaciones mantienen las
+    //     máscaras de entrada; no convierten datos faltantes en ausencia.
+    // EN: Accumulates windows using OR. Operations retain input masks;
+    //     missing data are not converted into absence.
+    consecutiveMask = consecutiveMask.or(triple);
+  }
+
+  // ES: Conserva zonas con valor cero o sin datos en "bajos".
+  //     Los valores distintos de cero quedan excluidos.
+  // EN: Retains areas with zero values or missing data in "bajos".
+  //     Nonzero values are excluded.
+  // Excluir zonas dentro del raster: usamos bajos igual a 0 o nulo
+  var fueraDeBajos = bajos.unmask(0).eq(0); // Incluye nodata
+
+  // ES: Aplica la máscara de exclusión a las secuencias de clase 15.
+  // EN: Applies the exclusion mask to class 15 sequences.
+  var maskedConsecutive = consecutiveMask.updateMask(fueraDeBajos);
+
+  // ES: Sustituye la presencia por el código de clase y convierte a byte.
+  // EN: Replaces presence with the class code and converts to byte.
+  var result = maskedConsecutive.multiply(classIdInt).toByte();
+
+  // ES: Enmascara los ceros, nombra la banda y agrega el identificador de clase.
+  // EN: Masks zeros, names the band, and adds the class identifier.
+  return result.mask(result.neq(0)).rename('frequency').set('class_id', classId);
+}
+
+   else {
+
+    // ES: Suma las presencias anuales por píxel sobre las observaciones válidas.
+    // EN: Sums annual class occurrences per pixel over valid observations.
+    var frequency = maskCollection.reduce(ee.Reducer.sum());
+
+    // ES: Selecciona los píxeles que alcanzan el umbral de la clase y les
+    //     asigna su código, almacenado como entero de 8 bits sin signo.
+    // EN: Selects pixels meeting the class threshold and assigns their
+    //     class code, stored as an unsigned 8-bit integer.
+    var frequencyMask = frequency.gte(classFrequency[classId])
+      .multiply(classIdInt)
+      .toByte();
+
+    // ES: Enmascara los píxeles que no cumplen el criterio y normaliza
+    //     el nombre de banda y la propiedad de clase.
+    // EN: Masks pixels that do not meet the criterion and standardizes
+    //     the band name and class property.
+    return frequencyMask.mask(frequencyMask.neq(0)).rename('frequency').set('class_id', classId);
+  }
+};
+///////////////////////////
+//FUNCTION: LOOP for each carta
+
+// ES: El bloque siguiente genera máscaras por clase, no un bucle por carta.
+//     Esta lista se declara, pero no se utiliza después.
+// EN: The following block generates masks per class, not a loop over map sheets.
+//     This list is declared but is not used afterward.
+var lista_image = ee.List([]);
+
+// ES: Define los umbrales por clase. La clase 18 requiere cuatro ocurrencias;
+//     las demás usan "freq_lim", salvo la clase 15, cuyo criterio de tres años
+//     consecutivos está implementado directamente en la función.
+//     La clase 29 está en este diccionario, pero no en el remapeo anterior.
+//     La clase 4 está en el remapeo, pero no tiene una máscara de salida aquí.
+// EN: Defines thresholds per class. Class 18 requires four occurrences;
+//     others use "freq_lim", except class 15, whose three-consecutive-year
+//     criterion is implemented directly in the function.
+//     Class 29 is in this dictionary but not in the preceding remap.
+//     Class 4 is in the remap but has no output mask here.
+var classFrequency = { "2": freq_lim, "3": freq_lim, "9": freq_lim, "11": freq_lim, "12": freq_lim, "15": 3 ,"18": 4, 
+                      "21": freq_lim, "22": freq_lim, "29": freq_lim, "33": freq_lim,"79": freq_lim, "80": freq_lim, "83": freq_lim,}
+
+//print(Object.keys(classFrequency))
+
+// ES: Recorre las claves del diccionario y genera una imagen por clase
+//     llamando a getFrenquencyMask con la misma colección temporal.
+// EN: Iterates over dictionary keys and generates one image per class
+//     by calling getFrenquencyMask with the same temporal collection.
+var frequencyMasks = Object.keys(classFrequency).map(function(classId) {
+    return getFrenquencyMask(collection, classId);
+});
+
+// ES: Convierte el arreglo de máscaras por clase en una colección de imágenes.
+// EN: Converts the array of per-class masks into an image collection.
+frequencyMasks = ee.ImageCollection.fromImages(frequencyMasks);
+
+// ES: Combina las máscaras tomando el primer valor no enmascarado por píxel
+//     y recorta el resultado al ámbito "pampa".
+//     "pampa" debe existir como importación o variable definida fuera de este código.
+// EN: Combines masks by taking the first unmasked value per pixel
+//     and clips the result to "pampa".
+//     "pampa" must exist as an import or a variable defined outside this code.
+var referenceMap = frequencyMasks.reduce(ee.Reducer.firstNonNull()).clip(pampa);
+
+// ES: Excluye el código 27 y renombra la banda como "reference".
+// EN: Excludes code 27 and renames the band to "reference".
+referenceMap = referenceMap.mask(referenceMap.neq(27)).rename("reference");
+
+// ES: Crea una versión reproyectada a EPSG:4326 con escala nominal de 30 m.
+//     Esta versión se utiliza para visualizar; la exportación usa "referenceMap".
+// EN: Creates a version reprojected to EPSG:4326 at a nominal scale of 30 m.
+//     This version is used for display; the export uses "referenceMap".
+var referenceMap1 = referenceMap.reproject({
+  crs: 'EPSG:4326',   
+  scale: 30           
+});
+
+// ES: Configura los colores del mapa de referencia.
+//     El rango 0–34 no permite distinguir correctamente los códigos 79, 80 y 83.
+// EN: Configures the reference map colors.
+//     The 0–34 range cannot correctly distinguish codes 79, 80, and 83.
+var vis = {
+    'bands': ['reference'],
+    'min': 0,
+    'max': 34,
+    'palette': palettes.get('classification2')
+};
+
+
+// ES: Agrega al mapa la capa de clases persistentes, activada por defecto.
+// EN: Adds the persistent-class layer to the map, enabled by default.
+Map.addLayer(referenceMap1, vis, 'Classes persistentes'+ sufix, true);
+
+// ES: Crea una tarea de exportación a un asset de Earth Engine.
+//     Exporta los códigos como enteros de 8 bits con signo, a 30 m,
+//     dentro de "pampa". La política "mode" conserva la clase más frecuente
+//     al construir niveles de pirámide. La tarea se ejecuta desde Tasks.
+// EN: Creates an export task to an Earth Engine asset.
+//     Exports codes as signed 8-bit integers at 30 m within "pampa".
+//     The "mode" policy retains the most frequent class when building
+//     pyramid levels. The task is started from the Tasks tab.
+Export.image.toAsset({
+    "image": referenceMap.toInt8(),
+    "description": 'Pampa_amostras_estaveis_Uruguay_C' + colecion + sufix +'_v' + version ,
+    "assetId": dirout + 'Pampa_amostras_estaveis_Uruguay_C' + colecion + sufix +'_v' + version ,
+    "scale": 30,
+    "pyramidingPolicy": {
+        '.default': 'mode'
+    },
+    "maxPixels": 1e13,
+    "region": pampa
+});  
+
+// ES: Crea una imagen completamente enmascarada como base para dibujar límites.
+// EN: Creates a fully masked image as a base for drawing boundaries.
+var blank = ee.Image(0).mask(0);
+
+// ES: Dibuja los límites de las regiones con un ancho de dos píxeles.
+//     En paint(), una cadena como 'AA0000' se interpreta como el nombre de una
+//     propiedad de las entidades, no como un color hexadecimal.
+// EN: Draws region boundaries with a width of two pixels.
+//     In paint(), a string such as 'AA0000' is interpreted as a feature
+//     property name, not as a hexadecimal color.
+var outline = blank.paint(regioesCollection, 'AA0000', 2); 
+
+// ES: Define la visualización de los límites en negro con opacidad de 0,6.
+// EN: Sets boundary visualization to black with an opacity of 0.6.
+var visPar = {'palette':'000000','opacity': 0.6};
+
+// ES: Agrega los límites regionales al mapa, activados por defecto.
+// EN: Adds region boundaries to the map, enabled by default.
+Map.addLayer(outline, visPar, 'Regiao', true);
