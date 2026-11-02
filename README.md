@@ -7,9 +7,9 @@
 
 Official repositories responsible for the production, processing, validation, and analysis of MapBiomas Uruguay data.
 
-# MapBiomas Uruguay Collection 3 🌎
+# MapBiomas Uruguay Collection 3 y 4🌎
 
-Welcome to the folder structure overview for **MapBiomas Uruguay Collection 3**.  
+Welcome to the folder structure overview for **MapBiomas Uruguay Collection 3 y 4**.  
 This directory organizes the main scripts, inputs, and processing steps used throughout the workflow.
 
 Its structure follows the main stages of the classification process, making the repository easier to navigate, maintain, and understand.
